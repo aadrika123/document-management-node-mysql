@@ -1,0 +1,26 @@
+{
+  "name": "dms-mysql-aadrika",
+  "version": "1.0.0",
+  "description": "This is document management system. Tech used node express and mysql.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon index"
+  },
+  "author": "Dipu Singh",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "bcrypt": "^5.1.0",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.1",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.5.0",
+    "nodemon": "^2.0.22",
+    "path": "^0.12.7"
+  }
+}
