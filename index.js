@@ -48,8 +48,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
 const authRoutes = require('./src/routes/routeAuth')
-
+const documentRoute = require('./src/routes/routeDocument')
 app.use('/auth', authRoutes)
+app.use('/document', documentRoute)
 // app.use('/student', authorize(["Student"]), studentRoutes)
 // app.use('/pay', authorize(["Student","Admin"]), paymentRoutes)
 
