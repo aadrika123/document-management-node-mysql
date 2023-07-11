@@ -44,13 +44,18 @@ app.get('/', (req, res) => {
 app.use(handleDatabaseError);
 
 //in this the '/uploads' is route to access the file and 'uploads' is the folder where we have stored the documents.
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static('C:/dms/uploads'));
 
 
 const authRoutes = require('./src/routes/routeAuth')
 const documentRoute = require('./src/routes/routeDocument')
+const folderRoutes = require('./src/routes/routeFolder')
+
+
 app.use('/auth', authRoutes)
 app.use('/document', documentRoute)
+app.use('/folder', folderRoutes)
 // app.use('/student', authorize(["Student"]), studentRoutes)
 // app.use('/pay', authorize(["Student","Admin"]), paymentRoutes)
 

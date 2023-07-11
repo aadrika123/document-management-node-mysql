@@ -3,63 +3,48 @@ const executeQuery = require("../components/executeQuery");
 const url = process.env.BASEURL;
 
 /**
- * Retrieves the folder name where files will be uploaded based on the provided header token.
- * @param {string} headerToken - Token from the request header.
- * @returns {string|null} - The folder name if found, otherwise null.
+ * Retrieves the folder complete path where files will be uploaded based on the provided header token.
+ * @param {string} folderPathId - Token from the request header.
+ * @returns {string|null} - The folder path if found, otherwise null.
  */
 
-exports.getUploadFolderNameModal = async (headerToken) => {
-    const client = await pool.connect();
-    //Get Folder Name where files will be uploaded.
-    const result = await client.query(`SELECT folder_name FROM tokens AS t
-	JOIN modules AS m ON m.id = t.module_id
-	JOIN folders AS f ON f.module_id = m.id
-	WHERE t.token= $1`, [headerToken]);
-    client.release();
-    console.log("rows[0]", result.rows[0], headerToken)
-    return result.rows[0]?.folder_name ? result.rows[0]?.folder_name : null;
+exports.getUploadFolderPathIdModal = async (folderPathId) => {
+    //Get complete folder path where file is going to  upload
+    const result = await executeQuery(`SELECT * FROM folder_paths WHERE id = ?`, [folderPathId]);
+    return result[0]?.folder_path ? result[0]?.folder_path : null;
 }
 
 
-/**
- * Uploads a document to the database.
- * @param {Object} fileDetails - File details including originalname, encoding, mimetype, destination, filename, path, size, ipAddress, tags, computedDigest, and token.
- * @returns {Object} - The status and message of the upload process.
- * @throws {Error} - If there is an error during document upload.
- */
-exports.documentUploadModal = async (fileDetails) => { //myDoc/upload
-    // const ipAddress = req.connection.remoteAddress
+exports.documentUploadModal = async (fileDetails) => {
 
     console.log("fileDetails", fileDetails)
-    return
 
     try {
-        const result = await executeQuery(`SELECT f.module_id, f.id AS folder_id FROM tokens AS t
-        JOIN modules AS m ON m.id = t.module_id
-        JOIN folders AS f ON f.module_id = m.id
-        WHERE t.status = 1 AND t.token = $1`, [fileDetails.token]);
-        // return console.log("result",result.rows[0].module_id)
-        const moduleId = result?.rows[0]?.module_id;
-        const folderId = result?.rows[0]?.folder_id;
+        // This will get folder name and user id by User Access Token
+        const getFolderId = await executeQuery(`SELECT f.* FROM users AS u
+        JOIN folders AS f ON f.user_id = u.id
+        WHERE u.secret_key =?`, [fileDetails.token]);
 
+        const userId = getFolderId[0]?.user_id;
+        const folderId = getFolderId[0]?.id;
 
-        /// Look into moduleId, folder_id *********
+        if (folderId) {
+            const query = 'INSERT INTO documents (original_file_name, file_name, size, path_id, hash, author, parent_folder_id) VALUES (?,?,?,?,?,?,?)';
+            const values = [fileDetails?.originalname, fileDetails?.filename, fileDetails?.size, 1, fileDetails?.computedDigest, userId, folderId];
+            const result = await executeQuery(query, values);
+            const documentId = result?.insertId;
+            if (documentId) { // It will give id document where is uploaded
+                const updateMetaData = await executeQuery('insert into meta_data (document_id, attribute, attribute_value) VALUES (?,?,?)', [documentId, 'abc', 'zyx'])
+                console.log("updateMetaData", updateMetaData)
+            }
 
-
-        if (moduleId && folderId) {
-            const client = await pool.connect();
-            const query = 'INSERT INTO documents (original_file_name, encoding, type, destination, file_name, path, size, ip_address, tags, digest, module_id, folder_id) VALUES ($1, $2, $3,$4,$5,$6,$7, $8, $9, $10, $11, $12) RETURNING *';
-            const values = [fileDetails.originalname, fileDetails.encoding, fileDetails.mimetype, fileDetails.destination, fileDetails.filename, fileDetails.path, fileDetails.size, fileDetails.ipAddress, fileDetails.tags, fileDetails.computedDigest, moduleId, folderId];
-            const result = await client.query(query, values);
-            client.release();
-            if (result.rows[0]) return { status: true, message: "Document Upload Success." }
+            if (result?.affectedRows) return { status: true, message: "Document Upload Success." }
         } else {
-            client.release()
-            return { status: false, message: "Token Not Found or Expired" }
+            return { status: false, message: "Folder Not Found!" }
         }
     } catch (error) {
-        console.error('Error creating user', error);
-        throw new Error('Internal Server Error ModalDocument', error);
+        console.error('Error Document upload', error);
+        throw new Error('Error in Document Upload : ' + error);
     }
 };
 

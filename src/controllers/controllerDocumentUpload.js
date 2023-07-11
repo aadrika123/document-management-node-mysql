@@ -53,7 +53,7 @@ exports.documentUploadController = async (req, res) => {  // POST => /myDoc/uplo
             }
         } catch (error) {
             console.error('Catch Error upload document', error);
-            res.status(500).json({ error: 'Internal Server Error controller Document upload', msg: error });
+            res.status(500).json({ error: 'Internal Server Error controller Document upload', msg: error.message });
         }
     }
 }
