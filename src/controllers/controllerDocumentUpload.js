@@ -1,17 +1,14 @@
 const crypto = require('crypto');
 const fs = require('fs');
+const { generateDocumentNumber } = require('../components/MasterFunctions');
 const { documentUploadModal } = require('../modal/modalDocumentUpload');
 
 
+// Document Upload
+exports.documentUploadController = async (req, res) => {
 
-exports.documentUploadController = async (req, res) => {  // POST => /myDoc/upload
-    //Validation
-    // const { error, value } = fileUpload.validate(req.body, { abortEarly: false });
-    // if (error) {
-    //     const errorMessages = error.details.map(item => item.message);  //Collection Errors
-    //     return res.status(400).json({ error: errorMessages });
-    // }
-    // Header Token
+    const { tags, referenceNo } = req.body; // Get tag and Reference form request
+
     if (!req.file || !req.headers['x-digest']) {
         // File or digest is missing, handle the error
         res.status(400).json({ status: false, message: 'File or digest is missing.', file: req.file, header: req.headers['x-digest'] });
@@ -42,14 +39,22 @@ exports.documentUploadController = async (req, res) => {  // POST => /myDoc/uplo
 
     const handleAfterDocDigestVerify = async (computedDigest) => {
         const ipAddress = req.connection.remoteAddress; // Get IP Address
-        const { tags } = req.body; // Get tags form request
         const token = req.headers.token; // Get token from header only for document upload
         const { originalname, encoding, mimetype, destination, filename, path, size } = req.file; // File Details
-        const fileDetails = { originalname: originalname, encoding: encoding, mimetype: mimetype, destination: destination, filename: filename, path: path, size: size, ipAddress, tags, token, computedDigest }
+        const generateRefNo = "REF" + Date.now(); // Generate Reference Number
+
+        //Generate Unique No of every Document
+        const uniqueNo = await generateDocumentNumber(8)
+
+        // console.log("Unique no is : ", uniqueNo)
+        // return
+        const fileDetails = { refNo: generateRefNo, originalname: originalname, encoding: encoding, mimetype: mimetype, destination: destination, filename: filename, path: path, size: size, ipAddress, tags, token, computedDigest, referenceNo, uniqueNo }
+
+        //Generate Reference Number everting when document is going to upload.
         try {
             const result = await documentUploadModal(fileDetails);
             if (result) {
-                res.status(201).json({ status: result.status, message: result.message, data: result.date });
+                res.status(201).json({ status: result.status, message: result.message, data: result.data });
             }
         } catch (error) {
             console.error('Catch Error upload document', error);

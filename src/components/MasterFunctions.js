@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 
 exports.decodeJWT = async (token) => {
@@ -56,5 +57,12 @@ exports.generateRandomNumberWithString = async (length) => {
     } catch (error) {
         return res.status(500).json({ "status": false, message: "Internal Server Error", data: error.message });
     }
+}
+
+// Generate a unique document number
+exports.generateDocumentNumber = (length) => {
+    const randomBytes = crypto.randomBytes(length); // Generate 8 random bytes
+    const documentNumber = randomBytes.toString('hex'); // Convert random bytes to a hexadecimal string
+    return documentNumber;
 }
 

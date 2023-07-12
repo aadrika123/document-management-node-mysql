@@ -16,10 +16,8 @@ exports.getUploadFolderPathIdModal = async (folderPathId) => {
     return result[0]?.folder_path ? result[0]?.folder_path : null;
 }
 
-
+// This is modal For document upload
 exports.documentUploadModal = async (fileDetails) => {
-
-    console.log("fileDetails", fileDetails)
 
     try {
         // This will get folder name and user id by User Access Token
@@ -30,17 +28,30 @@ exports.documentUploadModal = async (fileDetails) => {
         const userId = getFolderId[0]?.user_id;
         const folderId = getFolderId[0]?.id;
 
+        // check the version of a document if the version is available i will increase by one else it will assign version to 1
+        // const getDocDetails = await executeQuery('select version, unique_id from documents where reference_no =?', [fileDetails.referenceNo])
+        const getDocDetails = await executeQuery(`SELECT doc.version, doc.unique_id FROM documents AS doc
+        JOIN (SELECT unique_id FROM documents 
+            WHERE reference_no = ?
+        ) AS uid ON uid.unique_id = doc.unique_id
+        ORDER BY id desc
+        LIMIT 1`, [fileDetails.referenceNo])
+        const version = getDocDetails[0]?.version + 1 || 1;
+        const uniqueId = getDocDetails[0]?.unique_id || fileDetails?.uniqueNo; // If Updating the existing document then unique id should be same for multiple other wise new unique no.
+
+        // console.log("getDocDetails", getDocDetails)
+        // return
         if (folderId) {
-            const query = 'INSERT INTO documents (original_file_name, file_name, size, path_id, hash, author, parent_folder_id) VALUES (?,?,?,?,?,?,?)';
-            const values = [fileDetails?.originalname, fileDetails?.filename, fileDetails?.size, 1, fileDetails?.computedDigest, userId, folderId];
+            const query = 'INSERT INTO documents (original_file_name, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id) VALUES (?,?,?,?,?,?,?,?,?,?)';
+            const values = [fileDetails?.originalname, uniqueId, fileDetails?.filename, fileDetails?.size, 1, fileDetails.refNo, version, fileDetails?.computedDigest, userId, folderId];
             const result = await executeQuery(query, values);
             const documentId = result?.insertId;
             if (documentId) { // It will give id document where is uploaded
-                const updateMetaData = await modalMetaDataInsert(documentId, fileDetails); // (documentId, fileDetails)
+                const updateMetaData = await modalMetaDataInsert(documentId, fileDetails); // Insert Meta Data in Database (documentId, fileDetails)
                 console.log("updateMetaData", updateMetaData)
             }
             const resultAuditTrail = await auditTrailInsert(userId, documentId, `Document Uploaded : ${fileDetails?.filename}`); // Create Log - (userId, documentId, action)
-            if (result?.affectedRows) return { status: true, message: "Document Upload Success." }
+            if (result?.affectedRows) return { status: true, message: "Document Upload Success.", data: { "ReferenceNo": fileDetails.refNo } }
         } else {
             return { status: false, message: "Folder Not Found!" }
         }
