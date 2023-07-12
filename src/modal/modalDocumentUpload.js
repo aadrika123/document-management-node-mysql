@@ -1,5 +1,7 @@
 const pool = require('../database')
 const executeQuery = require("../components/executeQuery");
+const { modalMetaDataInsert } = require('./modalMetaDate');
+const { auditTrailInsert } = require('./modalAuditTrail');
 const url = process.env.BASEURL;
 
 /**
@@ -34,10 +36,10 @@ exports.documentUploadModal = async (fileDetails) => {
             const result = await executeQuery(query, values);
             const documentId = result?.insertId;
             if (documentId) { // It will give id document where is uploaded
-                const updateMetaData = await executeQuery('insert into meta_data (document_id, attribute, attribute_value) VALUES (?,?,?)', [documentId, 'abc', 'zyx'])
+                const updateMetaData = await modalMetaDataInsert(documentId, fileDetails); // (documentId, fileDetails)
                 console.log("updateMetaData", updateMetaData)
             }
-
+            const resultAuditTrail = await auditTrailInsert(userId, documentId, `Document Uploaded : ${fileDetails?.filename}`); // Create Log - (userId, documentId, action)
             if (result?.affectedRows) return { status: true, message: "Document Upload Success." }
         } else {
             return { status: false, message: "Folder Not Found!" }

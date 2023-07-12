@@ -13,9 +13,9 @@ exports.viewFoldersModal = () => {
     }
 }
 
-exports.modalFolderCreate = (folderName) => {
+exports.modalFolderCreate = (userId, folderName) => {
     try {
-        const result = executeQuery('insert into folders (folder_name) VALUES (?)', [folderName])
+        const result = executeQuery('insert into folders (user_id, folder_name) VALUES (?,?)', [userId, folderName])
         console.log("result in Folder Modal", result)
         return result;
     } catch (error) {
