@@ -2,6 +2,7 @@ const pool = require('../database')
 const executeQuery = require("../components/executeQuery");
 const { modalMetaDataInsert } = require('./modalMetaDate');
 const { auditTrailInsert } = require('./modalAuditTrail');
+const res = require('express/lib/response');
 const url = process.env.BASEURL;
 
 /**
@@ -20,16 +21,18 @@ exports.getUploadFolderPathIdModal = async (folderPathId) => {
 exports.documentUploadModal = async (fileDetails) => {
 
     try {
+        // Begin the transaction
+        await executeQuery('START TRANSACTION');
+
         // This will get folder name and user id by User Access Token
         const getFolderId = await executeQuery(`SELECT f.* FROM users AS u
         JOIN folders AS f ON f.user_id = u.id
         WHERE u.secret_key =?`, [fileDetails.token]);
 
-        const userId = getFolderId[0]?.user_id;
-        const folderId = getFolderId[0]?.id;
+        const userId = getFolderId[0]?.user_id; // Get User Id
+        const folderId = getFolderId[0]?.id; // Get folder id
 
         // check the version of a document if the version is available i will increase by one else it will assign version to 1
-        // const getDocDetails = await executeQuery('select version, unique_id from documents where reference_no =?', [fileDetails.referenceNo])
         const getDocDetails = await executeQuery(`SELECT doc.version, doc.unique_id FROM documents AS doc
         JOIN (SELECT unique_id FROM documents 
             WHERE reference_no = ?
@@ -38,12 +41,9 @@ exports.documentUploadModal = async (fileDetails) => {
         LIMIT 1`, [fileDetails.referenceNo])
         const version = getDocDetails[0]?.version + 1 || 1;
         const uniqueId = getDocDetails[0]?.unique_id || fileDetails?.uniqueNo; // If Updating the existing document then unique id should be same for multiple other wise new unique no.
-
-        // console.log("getDocDetails", getDocDetails)
-        // return
         if (folderId) {
-            const query = 'INSERT INTO documents (original_file_name, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id) VALUES (?,?,?,?,?,?,?,?,?,?)';
-            const values = [fileDetails?.originalname, uniqueId, fileDetails?.filename, fileDetails?.size, 1, fileDetails.refNo, version, fileDetails?.computedDigest, userId, folderId];
+            const query = 'INSERT INTO documents (original_file_name, user_id, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)';
+            const values = [fileDetails?.originalname, userId, uniqueId, fileDetails?.filename, fileDetails?.size, 1, fileDetails.refNo, version, fileDetails?.computedDigest, userId, folderId];
             const result = await executeQuery(query, values);
             const documentId = result?.insertId;
             if (documentId) { // It will give id document where is uploaded
@@ -55,42 +55,16 @@ exports.documentUploadModal = async (fileDetails) => {
         } else {
             return { status: false, message: "Folder Not Found!" }
         }
+        // Commit the transaction if everything is successful
+        await executeQuery('COMMIT');
     } catch (error) {
+        await executeQuery('ROLLBACK');
         console.error('Error Document upload', error);
         throw new Error('Error in Document Upload : ' + error);
     }
 };
 
-/**
- * Retrieves information about a specific document based on the ID and token.
- * @param {number} id - Document ID.
- * @param {string} token - Token from the request.
- * @returns {Object|boolean} - The retrieved document information if found, otherwise false.
- * @throws {Error} - If there is an error while retrieving the document.
- */
 
-exports.viewDocOneModal = async (id, token) => {
-    try {
-        const client = await pool.connect();
-        const query = `SELECT d.id AS documentId, d.size, d.type, d.destination, d.file_name, d.path, d.ip_address, f.folder_token, f.folder_name, f.folder_tags, m.module_name FROM documents AS d
-        JOIN folders AS f ON f.id = d.folder_id
-        JOIN modules AS m ON m.id = f.module_id
-        JOIN tokens AS t ON t.module_id = f.module_id
-        WHERE t.status = 1 AND t.token = $1 AND d.id = $2 LIMIT 1`;
-        const values = [token, id];
-        const result = await client.query(query, values)
-        const rows = result.rows[0]
-        if (rows) {
-            const fullPath = `${url}/${rows?.path}`
-            const documentsWithFullPath = { ...rows, fullPath }
-            return documentsWithFullPath;
-        } else return false;
-
-    } catch (error) {
-        console.log("Error Fetch one doc in Modal ==>", error)
-        throw new Error('Error Fetch one doc in Modal', error)
-    }
-}
 
 /**
  * Retrieves information about all documents based on the provided token.
@@ -99,69 +73,34 @@ exports.viewDocOneModal = async (id, token) => {
  * @throws {Error} - If there is an error while retrieving the documents.
  */
 
-exports.viewAllDocumentsModal = async (token) => {
+exports.modalViewAllDocuments = async (token) => {
     try {
-        const client = await pool.connect();
-        const result = await client.query(`SELECT d.id AS documentId, d.size, d.type, d.destination, d.file_name, d.path, d.ip_address, f.folder_token, f.folder_name, f.folder_tags, m.module_name FROM documents AS d
-        JOIN folders AS f ON f.id = d.folder_id
-        JOIN modules AS m ON m.id = f.module_id
-        JOIN tokens AS t ON t.module_id = f.module_id
-        WHERE t.status = 1 AND t.token = $1`, [token]);
-        client.release()
-        const rows = result.rows[0]
-        if (rows) {
-            const rows = result.rows;
-            const documentsWithFullPath = rows.map((row) => {
-                const fullPath = `${url}/uploads/${row.folder_name}/${row.file_name}`; // Replace with your actual document path logic
-                return { ...row, fullPath };
-            });
-            return documentsWithFullPath;
-        } else return false;
-
+        const result = await executeQuery('SELECT * FROM documents')
+        return result;
     } catch (error) {
         console.log("Error in Modal while fetching doc list")
-        throw new Error('Error doc list fetch in Modal', error)
+        throw new Error('Error doc list fetch in Modal : ' + error)
     }
 }
 
 
-/**
- * Searches for documents based on the provided search keys.
- * @param {string} searchKeys - Search keys.
- * @returns {Array|boolean} - An array of documents with their full paths if found, otherwise false.
- * @throws {Error} - If there is an error while searching for documents.
- */
-
-exports.searchByTagModal = async (searchKeys) => {
-
+exports.modalViewDocumentsByUniqueId = async (uniqueId) => {
     try {
-        const client = await pool.connect();
-        const result = await client.query(`SELECT d.id AS documentId, d.size, d.type, d.tags AS documentTags, d.destination, d.file_name, d.path, d.ip_address, f.folder_token, f.folder_name, f.folder_tags FROM documents AS d
-        JOIN folders AS f ON f.id =  d.folder_id
-        WHERE d.tags LIKE $1;`, [`%${searchKeys}%`]);
-
-        // const keysArray = searchKeys.split(',').map((key) => key.trim());
-        // const placeholders = keysArray.map((_, index) => `$${index + 1}`).join(', ');
-
-        // const query = `SELECT *
-        // FROM document
-        // WHERE tags LIKE ANY(ARRAY[${placeholders}]);`;
-        // const result = await client.query(query, keysArray);
-
-
-        client.release()
-        const rows = result.rows[0]
-        if (rows) {
-            const rows = result.rows;
-            const documentsWithFullPath = rows.map((row) => {
-                const fullPath = `${url}/${row.path}`; // Replace with your actual document path logic
-                return { ...row, fullPath };
-            });
-            return documentsWithFullPath;
-        } else return false;
-
+        const result = await executeQuery('select * from documents where unique_id=?', [uniqueId])
+        console.log(result)
+        return result;
     } catch (error) {
-        console.log("Error in Modal while fetching doc list")
-        throw new Error('Error doc list fetch in Modal', error)
+        throw new Error('Error : ' + error)
+    }
+}
+
+// This modal for view document by Reference No
+exports.modalViewDocumentsByReference = async (referenceNo) => {
+    try {
+        const result = await executeQuery('select * from documents where reference_no=?', [referenceNo])
+        console.log(result)
+        return result;
+    } catch (error) {
+        throw new Error('Error : ' + error)
     }
 }
