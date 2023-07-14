@@ -22,5 +22,9 @@
     "mysql2": "^3.5.0",
     "nodemon": "^2.0.22",
     "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "jest": "^29.6.1",
+    "supertest": "^6.3.3"
   }
 }

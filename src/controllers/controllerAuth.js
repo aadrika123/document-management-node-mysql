@@ -103,9 +103,9 @@ exports.loginController = async (req, res) => {
             const token = jwt.sign(data, secretKey, {
                 expiresIn: '24h'
             });
-            res.json({ status: true, message: 'Login Successful', token: token, data: data });
+            res.status(200).send({ status: true, message: 'Login Successful', token: token, data: data });
         } else {
-            res.status(200).send({ status: false, message: "Incorrect email or password", data: null });
+            res.status(401).send({ status: false, message: "Incorrect email or password", data: null });
         }
     } catch (error) {
         res.status(200).send({ status: false, message: "Something went wrong", data: error.message });

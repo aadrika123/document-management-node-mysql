@@ -8,6 +8,7 @@ exports.uploadFileUsingMulter = async (req, res, next) => {
     if (!folderPathId) return res.status(422).json({ status: false, message: 'Folder Path ID Require.', data: [] });
     //Get Folder name form db by token from header
     const folderPath = await getUploadFolderPathIdModal(folderPathId);
+    if(!folderPath) return res.status(500).json({status:false, message:"Invalid Folder Id : " + folderPathId, data:[]})
 
     console.log("folderName", folderPath)
     // return

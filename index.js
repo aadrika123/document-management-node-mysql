@@ -64,3 +64,5 @@ app.use('/folder', folderRoutes)
 app.listen(port, () => {
     console.log(`App is listing on :${baseurl}/`)
 });
+
+module.exports = app;
