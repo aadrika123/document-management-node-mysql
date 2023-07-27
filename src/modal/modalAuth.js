@@ -148,3 +148,43 @@ exports.viewProfileDetailsModal = async (userId) => {
   }
 }
 
+exports.selfProfileDetailsModal = async (userId) => {
+
+  try {
+    // check if user available or not
+    const query = 'SELECT * FROM users WHERE id = ? AND STATUS = 1';
+    const values = [userId];
+    const result = await executeQuery(query, values);
+    console.log("result", result)
+    if (result.length > 0) {
+      return { status: true, message: "Here is Profile Details", data: result[0] }
+    } else return { status: false, message: "No Profile Found", data: [] }
+  } catch (error) {
+    console.error('Error creating user', error);
+    throw new Error('Modal Permission Update Error : ' + error.message);
+  }
+}
+
+exports.revokeAccessTokenModal = async (userId, key) => {
+
+  try {
+    // check if user available or not
+    const query = 'SELECT * FROM users WHERE id = ? AND STATUS = 1';
+    const values = [userId];
+    const result = await executeQuery(query, values);
+    console.log("result", result)
+    if (result.length > 0) {
+
+      const runQuery = await executeQuery('UPDATE users SET secret_key = ? WHERE id = ? AND status = 1', [key, userId])
+      if (runQuery?.changedRows > 0) {
+        return { status: true, message: "Key Regenerated", data: key }
+      }else{
+        return { status: false, message: "Failed to Key Regeneration", data: runQuery, key }
+      }
+    } else return { status: false, message: "No User Found", data: [] }
+  } catch (error) {
+    console.error('Error creating user', error);
+    throw new Error('Modal Permission Update Error : ' + error.message);
+  }
+}
+

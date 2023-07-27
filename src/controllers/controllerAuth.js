@@ -6,7 +6,7 @@ const secretKey = 'mysecretkey';
 const saltRounds = 10; // Number of salt rounds for hashing
 
 const { decodeJWT, generateRandomNumberWithString } = require("../components/MasterFunctions");
-const { changePasswordModal, loginUserModal, registerUserModal, changePermissionModal, viewProfileDetailsModal } = require("../modal/modalAuth");
+const { changePasswordModal, loginUserModal, registerUserModal, changePermissionModal, viewProfileDetailsModal, selfProfileDetailsModal, revokeAccessTokenModal } = require("../modal/modalAuth");
 
 // This is login validation scheme
 const loginSchema = Joi.object({
@@ -52,7 +52,7 @@ exports.registerController = async (req, res) => {
         const hashedPassword = await bcrypt.hash(req.body.password, saltRounds);
 
         //Generate Random Token
-        const token = await generateRandomNumberWithString(20);
+        const token = await generateRandomNumberWithString(50);
 
         let body = {
             email: req.body.email,
@@ -83,6 +83,11 @@ exports.loginController = async (req, res) => {
         if (!loggedInUser) {
             return res.status(200).json({ status: false, message: 'User not found' });
         }
+        if (loggedInUser.status != 1) {
+            return res.status(200).json({ status: false, message: 'User is disabled' });
+        }
+
+        console.log("loggedInUser", loggedInUser)
 
         // Create Object of Data
         const data = {
@@ -90,6 +95,7 @@ exports.loginController = async (req, res) => {
             firstName: loggedInUser.first_name,
             lastName: loggedInUser.last_name,
             userEmail: loggedInUser.email,
+            type: loggedInUser.role_id,
             permission: {
                 read: loggedInUser.read_access,
                 write: loggedInUser.write_access,
@@ -103,7 +109,8 @@ exports.loginController = async (req, res) => {
             const token = jwt.sign(data, secretKey, {
                 expiresIn: '24h'
             });
-            res.status(200).send({ status: true, message: 'Login Successful', token: token, data: data });
+            data.token = token;
+            res.status(200).send({ status: true, message: 'Login Successful', data: data });
         } else {
             res.status(401).send({ status: false, message: "Incorrect email or password", data: null });
         }
@@ -181,5 +188,41 @@ exports.userProfileDetails = async (req, res) => {
         res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
     } catch (error) {
         res.status(500).json({ error: 'Error in Profile Details ', msg: error.message });
+    }
+}
+
+// This is controller for view self profile details
+exports.selfProfileDetails = async (req, res) => {
+    try {
+        // Check Token
+        const token = req?.headers?.authorization?.split(' ')[1];
+        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
+        const userDetails = await decodeJWT(token)
+        console.log("userDetails", userDetails)
+        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+
+        const result = await selfProfileDetailsModal(userDetails?.userId)
+        res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
+    } catch (error) {
+        res.status(500).json({ error: 'Error in Profile Details ', msg: error.message });
+    }
+}
+
+exports.revokeAccessKey = async (req, res) => {
+    try {
+        // Check Token
+        const token = req?.headers?.authorization?.split(' ')[1];
+        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
+        const userDetails = await decodeJWT(token)
+        console.log("userDetails", userDetails)
+        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+
+        //Generate Random Token
+        const key = await generateRandomNumberWithString(50);
+
+        const result = await revokeAccessTokenModal(userDetails?.userId, key)
+        res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
+    } catch (error) {
+        res.status(500).json({ error: 'Error in Regenerate Token ', msg: error.message });
     }
 }
