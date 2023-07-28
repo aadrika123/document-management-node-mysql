@@ -107,7 +107,7 @@ exports.controllerViewByReferenceNo = async (req, res) => {
         const result = await modalViewDocumentsByReference(referenceNo) // called modal 
         if (result?.length > 0) {
             const data = await addFullImagePathInData(result); // This function Add a key for full image path
-            res.status(200).json({ status: true, message: "Document View By Reference No", data: data[0] })
+            res.status(200).json({ status: true, message: "Document View By Reference No", data: data })
         } else {
             res.status(200).json({ status: false, message: "No Documents found against this reference No", data: referenceNo })
         }

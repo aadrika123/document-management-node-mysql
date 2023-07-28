@@ -164,6 +164,27 @@ exports.selfProfileDetailsModal = async (userId) => {
     throw new Error('Modal Permission Update Error : ' + error.message);
   }
 }
+exports.selfProfileUpdateModal = async (userId, firstName, lastName, phone) => {
+
+  try {
+    // check if user available or not
+    const query = 'SELECT * FROM users WHERE id = ? AND STATUS = 1';
+    const values = [userId];
+    const result = await executeQuery(query, values);
+    console.log("result", result)
+    if (result.length > 0) {
+      const runQuery = await executeQuery('UPDATE users SET first_name = ?, last_name=?, phone =? WHERE id = ? AND status = 1', [firstName, lastName, phone, userId])
+      if (runQuery?.changedRows > 0) {
+        return { status: true, message: "Profile Update Successfully", data: [] }
+      } else {
+        return { status: false, message: "Failed to update profile", data: runQuery }
+      }
+    } else return { status: false, message: "No Profile Found", data: [] }
+  } catch (error) {
+    console.error('Error update profile', error);
+    throw new Error('Profile Update Error : ' + error.message);
+  }
+}
 
 exports.revokeAccessTokenModal = async (userId, key) => {
 
@@ -178,7 +199,7 @@ exports.revokeAccessTokenModal = async (userId, key) => {
       const runQuery = await executeQuery('UPDATE users SET secret_key = ? WHERE id = ? AND status = 1', [key, userId])
       if (runQuery?.changedRows > 0) {
         return { status: true, message: "Key Regenerated", data: key }
-      }else{
+      } else {
         return { status: false, message: "Failed to Key Regeneration", data: runQuery, key }
       }
     } else return { status: false, message: "No User Found", data: [] }

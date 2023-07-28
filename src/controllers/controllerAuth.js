@@ -2,11 +2,21 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const Joi = require('joi');
 
+// const CryptoJS = require('crypto-js'); // Import CryptoJS library for AES encryption
+
+
 const secretKey = 'mysecretkey';
 const saltRounds = 10; // Number of salt rounds for hashing
 
+//For Encryption Payload
+// const encryptData = (data, secretKey) => {
+//     const encryptedData = CryptoJS.AES.encrypt(JSON.stringify(data), secretKey).toString();
+//     return encryptedData;
+// };
+
 const { decodeJWT, generateRandomNumberWithString } = require("../components/MasterFunctions");
-const { changePasswordModal, loginUserModal, registerUserModal, changePermissionModal, viewProfileDetailsModal, selfProfileDetailsModal, revokeAccessTokenModal } = require("../modal/modalAuth");
+const { changePasswordModal, loginUserModal, registerUserModal, changePermissionModal, viewProfileDetailsModal, selfProfileDetailsModal, revokeAccessTokenModal, selfProfileUpdateModal } = require("../modal/modalAuth");
+const { encryptData } = require('../components/middleware/EncryptDecrypt');
 
 // This is login validation scheme
 const loginSchema = Joi.object({
@@ -110,7 +120,13 @@ exports.loginController = async (req, res) => {
                 expiresIn: '24h'
             });
             data.token = token;
-            res.status(200).send({ status: true, message: 'Login Successful', data: data });
+
+            // Encrypt the success response data
+            const encryptedResponse = await encryptData(data, secretKey);
+
+            // res.status(200).send({ encryptedResponse });
+
+            res.status(200).send({ status: true, message: 'Login Successful', data: encryptedResponse });
         } else {
             res.status(401).send({ status: false, message: "Incorrect email or password", data: null });
         }
@@ -202,6 +218,23 @@ exports.selfProfileDetails = async (req, res) => {
         if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
 
         const result = await selfProfileDetailsModal(userDetails?.userId)
+        res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
+    } catch (error) {
+        res.status(500).json({ error: 'Error in Profile Details ', msg: error.message });
+    }
+}
+exports.selfProfileUpdate = async (req, res) => {
+    try {
+        // Check Token
+        const token = req?.headers?.authorization?.split(' ')[1];
+        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
+        const userDetails = await decodeJWT(token)
+        console.log("userDetails", userDetails)
+        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+
+        const { firstName, lastName, phone } = req.body;
+
+        const result = await selfProfileUpdateModal(userDetails?.userId, firstName, lastName, phone)
         res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
     } catch (error) {
         res.status(500).json({ error: 'Error in Profile Details ', msg: error.message });
