@@ -97,8 +97,6 @@ exports.loginController = async (req, res) => {
             return res.status(200).json({ status: false, message: 'User is disabled' });
         }
 
-        console.log("loggedInUser", loggedInUser)
-
         // Create Object of Data
         const data = {
             userId: loggedInUser.id,

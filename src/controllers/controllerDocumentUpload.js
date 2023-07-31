@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
-const { generateDocumentNumber } = require('../components/MasterFunctions');
+const { generateDocumentNumber, decodeJWT } = require('../components/MasterFunctions');
 const { documentUploadModal, modalViewAllDocuments, modalViewDocumentsByUniqueId, modalViewDocumentsByReference } = require('../modal/modalDocumentUpload');
 
 // This is function which take data and add full path of document
@@ -71,7 +71,15 @@ exports.documentUploadController = async (req, res) => {
 // View All the documents
 exports.controllerViewAllDocuments = async (req, res) => {
     try {
-        const result = await modalViewAllDocuments(); // called modal for view all documents
+        // Check Token
+        const token = req?.headers?.authorization?.split(' ')[1];
+        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
+        const userDetails = await decodeJWT(token)
+        console.log("userDetails", userDetails)
+        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+
+
+        const result = await modalViewAllDocuments(userDetails?.type, userDetails?.userId); // called modal for view all documents
         if (result?.length > 0) {
             const data = await addFullImagePathInData(result); // This function Add a key for full image path
             res.status(200).json({ status: true, message: "List of Documents", data: data })

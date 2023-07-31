@@ -73,9 +73,20 @@ exports.documentUploadModal = async (fileDetails) => {
  * @throws {Error} - If there is an error while retrieving the documents.
  */
 
-exports.modalViewAllDocuments = async (token) => {
+exports.modalViewAllDocuments = async (role, userId) => {
     try {
-        const result = await executeQuery('SELECT * FROM documents')
+
+        let result
+        if (role === 9) {
+            result = await executeQuery(`SELECT doc.original_file_name, doc.unique_id, doc.hash, doc.file_name, doc.size, doc.file_type, doc.reference_no, doc.created_date, doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  FROM documents AS doc
+            JOIN users AS u
+            ON u.id = doc.user_id`)
+        } else {
+            result = await executeQuery(`SELECT doc.original_file_name, doc.unique_id, doc.hash, doc.file_name, doc.size, doc.file_type, doc.reference_no, doc.created_date, doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  FROM documents AS doc
+            JOIN users AS u
+            ON u.id = doc.user_id where user_id=?`, [userId])
+        }
+
         return result;
     } catch (error) {
         console.log("Error in Modal while fetching doc list")
@@ -86,7 +97,9 @@ exports.modalViewAllDocuments = async (token) => {
 
 exports.modalViewDocumentsByUniqueId = async (uniqueId) => {
     try {
-        const result = await executeQuery('select * from documents where unique_id=?', [uniqueId])
+        const result = await executeQuery(`SELECT doc.original_file_name, doc.unique_id, doc.hash, doc.file_name, doc.size, doc.file_type, doc.reference_no, doc.created_date, doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  FROM documents AS doc
+	JOIN users AS u
+	ON u.id = doc.user_id where unique_id=?`, [uniqueId])
         console.log(result)
         return result;
     } catch (error) {
@@ -97,7 +110,10 @@ exports.modalViewDocumentsByUniqueId = async (uniqueId) => {
 // This modal for view document by Reference No
 exports.modalViewDocumentsByReference = async (referenceNo) => {
     try {
-        const result = await executeQuery('select * from documents where reference_no=?', [referenceNo])
+        const result = await executeQuery(`SELECT md.*, doc.original_file_name, doc.unique_id, doc.hash, doc.file_name, doc.size, doc.file_type, doc.reference_no, doc.created_date, doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  FROM documents AS doc
+        JOIN meta_data AS md ON md.document_id = doc.id
+        JOIN users AS u ON u.id = doc.user_id 
+        where doc.reference_no=?`, [referenceNo])
         console.log(result)
         return result;
     } catch (error) {
