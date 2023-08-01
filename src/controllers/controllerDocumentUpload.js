@@ -14,6 +14,7 @@ const addFullImagePathInData = async (data) => {
 
 // Document Upload
 exports.documentUploadController = async (req, res) => {
+    const token = req.headers.token; // Get token from header only for document upload
 
     const { tags, referenceNo } = req.body; // Get tag and Reference form request
 
@@ -22,11 +23,13 @@ exports.documentUploadController = async (req, res) => {
         res.status(400).json({ status: false, message: 'File or digest is missing.', file: req.file, header: req.headers['x-digest'] });
         return;
     }
+    if (!token) {
+        return res.status(400).json({ status: false, message: 'Token is require.' });
+    }
 
     const receivedDigest = req.headers['x-digest']; // Assuming the digest is sent as a request header
     const receivedFile = req.file;// File path of the uploaded file
     const ipAddress = req.connection.remoteAddress; // Get IP Address
-    const token = req.headers.token; // Get token from header only for document upload
     const { originalname, encoding, mimetype, destination, filename, path, size } = req.file; // File Details
 
     const filePath = receivedFile.path;

@@ -43,10 +43,7 @@ const changePermissionSchema = Joi.object({
     write_permission: Joi.number().required(),
     delete_permission: Joi.number().required()
 }).unknown();
-// This is Change Permission validation scheme
-const viewUserProfileSchema = Joi.object({
-    userId: Joi.number().required()
-}).unknown();
+
 
 
 // This is user registration controller
@@ -181,29 +178,6 @@ exports.changePermission = async (req, res) => {
     }
 }
 
-// This is controller for view profile details
-exports.userProfileDetails = async (req, res) => {
-    const { userId } = req.body;
-    //Validation Code
-    const { error, value } = viewUserProfileSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-        const errorMessages = error.details.map(item => item.message);  //Collection Errors
-        return res.status(400).json({ error: errorMessages });
-    }
-
-    try {
-        // Check Token
-        const token = req?.headers?.authorization?.split(' ')[1];
-        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
-        const userDetails = await decodeJWT(token)
-        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
-
-        const result = await viewProfileDetailsModal(userId)
-        res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
-    } catch (error) {
-        res.status(500).json({ error: 'Error in Profile Details ', msg: error.message });
-    }
-}
 
 // This is controller for view self profile details
 exports.selfProfileDetails = async (req, res) => {

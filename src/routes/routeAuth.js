@@ -6,7 +6,8 @@ const { uploadFileUsingMulter } = require("../components/middleware/uploadMulter
 
 router.route('/register').post(registerController);
 router.route('/change-permission').post(changePermission);
-router.route('/user-profile').post(userProfileDetails);
+
+// router.route('/user-profile').post(userProfileDetails); // shift to admin
 
 
 

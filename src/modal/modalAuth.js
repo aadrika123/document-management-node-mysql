@@ -127,26 +127,7 @@ exports.changePermissionModal = async (userId, read_permission, write_permission
 This code file contains a function related to viewing profile details of a user.
 */
 
-/**
- * View profile details of a user.
- * @param {number} userId - User ID.
- * @returns {Object} - The result of the profile view operation, containing status, message, and data.
- */
-exports.viewProfileDetailsModal = async (userId) => {
 
-  try {
-    // check if user available or not
-    const query = 'SELECT * FROM users WHERE id = ? AND STATUS = 1';
-    const values = [userId];
-    const result = await executeQuery(query, values);
-    if (result.length > 0) {
-      return { status: true, message: "Here is Profile Details", data: result[0] }
-    } else return { status: false, message: "No Profile Found", data: [] }
-  } catch (error) {
-    console.error('Error creating user', error);
-    throw new Error('Modal Permission Update Error : ' + error.message);
-  }
-}
 
 exports.selfProfileDetailsModal = async (userId) => {
 

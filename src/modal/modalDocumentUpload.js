@@ -53,7 +53,7 @@ exports.documentUploadModal = async (fileDetails) => {
             const resultAuditTrail = await auditTrailInsert(userId, documentId, `Document Uploaded : ${fileDetails?.filename}`); // Create Log - (userId, documentId, action)
             if (result?.affectedRows) return { status: true, message: "Document Upload Success.", data: { "ReferenceNo": fileDetails.refNo } }
         } else {
-            return { status: false, message: "Folder Not Found!" }
+            return { status: false, message: "Folder Not Found against this token!" }
         }
         // Commit the transaction if everything is successful
         await executeQuery('COMMIT');
