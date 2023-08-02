@@ -4,7 +4,7 @@ const path = require('path');
 const { decodeJWT } = require('../components/MasterFunctions');
 const { viewFoldersModal, modalFolderCreate } = require('../modal/folderModal');
 const { auditTrailInsert } = require('../modal/modalAuditTrail');
-const { modalViewAllUsers, viewProfileDetailsModal } = require('../modal/modalUserManagement');
+const { modalViewAllUsers, viewProfileDetailsModal, modalCreateUser } = require('../modal/modalUserManagement');
 const { modalGetUserDetailsBySecKey } = require('../modal/modalUsers');
 
 
@@ -109,6 +109,41 @@ exports.userProfileDetails = async (req, res) => {
         if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
 
         const result = await viewProfileDetailsModal(userId)
+        res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
+    } catch (error) {
+        res.status(500).json({ error: 'Error in Profile Details ', msg: error.message });
+    }
+}
+
+exports.controllerCreateUser = async (req, res) => {
+    try {
+        const { name, email, password, phone, role_id, read_access, write_access, delete_access } = req.body;
+        //Validation Code
+
+        const createUserSchema = Joi.object({
+            name: Joi.string().required(),
+            email: Joi.string().required(),
+            password: Joi.string().required(),
+            phone: Joi.number().required(),
+            role_id: Joi.string().required(),
+            read_access: Joi.string().required(),
+            write_access: Joi.string().required(),
+            delete_access: Joi.string().required(),
+        }).unknown();
+
+        const { error, value } = createUserSchema.validate(req.body, { abortEarly: false });
+        if (error) {
+            const errorMessages = error.details.map(item => item.message);  //Collection Errors
+            return res.status(400).json({ error: errorMessages });
+        }
+
+        // Check Token
+        const token = req?.headers?.authorization?.split(' ')[1];
+        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
+        const userDetails = await decodeJWT(token)
+        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+
+        const result = await modalCreateUser(name, email, password, phone, role_id, read_access, write_access, delete_access)
         res.status(201).json({ "status": result?.status, "message": result?.message, "data": result?.data });
     } catch (error) {
         res.status(500).json({ error: 'Error in Profile Details ', msg: error.message });
