@@ -121,7 +121,7 @@ exports.loginController = async (req, res) => {
 
             // res.status(200).send({ encryptedResponse });
 
-            res.status(200).send({ status: true, message: 'Login Successful', data: encryptedResponse });
+            res.status(200).send({ status: true, message: 'Login Successful', data: encryptedResponse, tempToken:data });
         } else {
             res.status(401).send({ status: false, message: "Incorrect email or password", data: null });
         }
@@ -186,7 +186,6 @@ exports.selfProfileDetails = async (req, res) => {
         const token = req?.headers?.authorization?.split(' ')[1];
         if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
         const userDetails = await decodeJWT(token)
-        console.log("userDetails", userDetails)
         if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
 
         const result = await selfProfileDetailsModal(userDetails?.userId)

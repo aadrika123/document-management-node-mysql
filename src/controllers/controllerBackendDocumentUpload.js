@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const { generateDocumentNumber, decodeJWT } = require('../components/MasterFunctions');
-const { documentUploadModal, modalViewAllDocuments, modalViewDocumentsByUniqueId, modalViewDocumentsByReference } = require('../modal/modalDocumentUpload');
+const { documentUploadModal, modalViewBackendDocumentsByUniqueId, modalViewBackendDocumentsByReference } = require('../modal/modalBackendDocumentUpload');
 
 // This is function which take data and add full path of document
 const addFullImagePathInData = async (data) => {
@@ -13,19 +13,21 @@ const addFullImagePathInData = async (data) => {
 }
 
 // Document Upload
-exports.documentUploadController = async (req, res) => {
+exports.documentBackendUploadController = async (req, res) => {
     const token = req.headers.token; // Get token from header only for document upload
 
     const { tags, referenceNo } = req.body; // Get tag and Reference form request
+
+    if (!token) {
+        return res.status(400).json({ status: false, message: 'Token is require.' });
+    }
 
     if (!req.file || !req.headers['x-digest']) {
         // File or digest is missing, handle the error
         res.status(400).json({ status: false, message: 'File or digest is missing.', file: req.file, header: req.headers['x-digest'] });
         return;
     }
-    if (!token) {
-        return res.status(400).json({ status: false, message: 'Token is require.' });
-    }
+
 
     const receivedDigest = req.headers['x-digest']; // Assuming the digest is sent as a request header
     const receivedFile = req.file;// File path of the uploaded file
@@ -42,8 +44,8 @@ exports.documentUploadController = async (req, res) => {
             // Handle error
             return res.status(500).json({ status: false, message: 'Error reading file.' });
         }
-        const computedDigest = crypto.createHash('SHA256').update(data).digest('hex');
-        // const computedDigest = crypto.createHash('SHA256').update('123').digest('hex');
+        // const computedDigest = crypto.createHash('SHA256').update(data).digest('hex');
+        const computedDigest = crypto.createHash('SHA256').update('123').digest('hex');
 
         if (receivedDigest === computedDigest) {
             handleAfterDocDigestVerify(computedDigest)
@@ -61,7 +63,7 @@ exports.documentUploadController = async (req, res) => {
 
         //Generate Reference Number everting when document is going to upload.
         try {
-            const result = await documentUploadModal(fileDetails);
+            const result = await documentUploadModal(fileDetails); // Upload Document Modal
             if (result) {
                 res.status(201).json({ status: result.status, message: result.message, data: result.data });
             }
@@ -73,44 +75,17 @@ exports.documentUploadController = async (req, res) => {
 }
 
 
-// View All the documents
-exports.controllerViewAllDocuments = async (req, res) => {
-    try {
-        // Check Token
-        const token = req?.headers?.authorization?.split(' ')[1];
-        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
-        const userDetails = await decodeJWT(token)
-
-        console.log("userDetails", token)
-        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
-
-
-        const result = await modalViewAllDocuments(userDetails?.type, userDetails?.userId); // called modal for view all documents
-        if (result?.length > 0) {
-            const data = await addFullImagePathInData(result); // This function Add a key for full image path
-            res.status(200).json({ status: true, message: "List of Documents", data: data })
-        } else {
-            res.status(200).json({ status: false, message: "No Documents found", data: [] })
-        }
-    } catch (error) {
-        res.status(500).json({ status: false, message: "Error while fetching all document", error: error.message })
-    }
-}
-
 // View Documents by unique id
-exports.controllerViewByUniqueId = async (req, res) => {
+exports.controllerBackendViewByUniqueId = async (req, res) => {
     try {
+        const token = req.headers.token; // Get token from header only for backend access
 
-        // Check Token
-        const token = req?.headers?.authorization?.split(' ')[1];
-        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
-        const userDetails = await decodeJWT(token)
-        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
-
-        console.log("userDetails",userDetails)
-
+        if (!token) {
+            return res.status(400).json({ status: false, message: 'Header token is require.' });
+        }
         const { uniqueId } = req.body;
-        const result = await modalViewDocumentsByUniqueId(uniqueId) // called modal
+
+        const result = await modalViewBackendDocumentsByUniqueId(uniqueId, token) // called modal
         if (result?.length > 0) {
             const data = await addFullImagePathInData(result); // This function Add a key for full image path
             res.status(200).json({ status: true, message: "List of Documents View By Unique Id", data: data })
@@ -124,25 +99,15 @@ exports.controllerViewByUniqueId = async (req, res) => {
 
 
 // View document by referenced No
-// exports.controllerViewByReferenceNo = async (req, res) => {
-//     try {
-//         const { referenceNo } = req.body;
-//         const result = await modalViewDocumentsByReference(referenceNo) // called modal 
-//         if (result?.length > 0) {
-//             const data = await addFullImagePathInData(result); // This function Add a key for full image path
-//             res.status(200).json({ status: true, message: "Document View By Reference No", data: data })
-//         } else {
-//             res.status(200).json({ status: false, message: "No Documents found against this reference No", data: referenceNo })
-//         }
-//     } catch (error) {
-//         res.status(500).json({ status: false, message: "Error while getting data by reference no", error: error.message })
-//     }
-// }
-
-exports.controllerViewByReferenceNo = async (req, res) => {
+exports.controllerBackendViewByReferenceNo = async (req, res) => {
     try {
+        const token = req.headers.token; // Get token from header only for backend access
+
+        if (!token) {
+            return res.status(400).json({ status: false, message: 'Header token is require.' });
+        }
         const { referenceNo } = req.body;
-        const result = await modalViewDocumentsByReference(referenceNo);
+        const result = await modalViewBackendDocumentsByReference(referenceNo, token);
 
         if (result?.length > 0) {
             const item = result[0]; // Since you're fetching a single document
