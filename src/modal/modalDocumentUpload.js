@@ -77,13 +77,33 @@ exports.modalViewAllDocuments = async (role, userId) => {
 
         let result
         if (role === 9) { // Show all document if it is admin
-            result = await executeQuery(`SELECT doc.original_file_name, doc.unique_id, doc.hash, doc.file_name, doc.size, doc.file_type, doc.reference_no, doc.created_date, doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  FROM documents AS doc
+            result = await executeQuery(`SELECT 
+            doc.original_file_name, 
+            doc.unique_id, doc.hash, 
+            doc.file_name, 
+            doc.size, 
+            doc.file_type, 
+            doc.reference_no, 
+            doc.created_date, 
+            doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  
+            FROM documents AS doc
             JOIN users AS u
             ON u.id = doc.user_id`)
         } else {
-            result = await executeQuery(`SELECT doc.original_file_name, doc.unique_id, doc.hash, doc.file_name, doc.size, doc.file_type, doc.reference_no, doc.created_date, doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  FROM documents AS doc
+            result = await executeQuery(`SELECT 
+            doc.original_file_name, 
+            doc.unique_id, 
+            doc.hash, 
+            doc.file_name, 
+            doc.size, 
+            doc.file_type, 
+            doc.reference_no, 
+            doc.created_date, 
+            doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  
+            FROM documents AS doc
             JOIN users AS u
-            ON u.id = doc.user_id where user_id=?`, [userId])
+            ON u.id = doc.user_id 
+            where user_id=?`, [userId])
         }
 
         return result;
@@ -94,11 +114,22 @@ exports.modalViewAllDocuments = async (role, userId) => {
 }
 
 
-exports.modalViewDocumentsByUniqueId = async (uniqueId) => {
+exports.modalViewDocumentsByUniqueId = async (uniqueId, userId) => {
     try {
-        const result = await executeQuery(`SELECT doc.original_file_name, doc.unique_id, doc.hash, doc.file_name, doc.size, doc.file_type, doc.reference_no, doc.created_date, doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  FROM documents AS doc
+        const result = await executeQuery(`SELECT 
+        doc.original_file_name, 
+        doc.unique_id, 
+        doc.hash, 
+        doc.file_name, 
+        doc.size, 
+        doc.file_type, 
+        doc.reference_no, 
+        doc.created_date, 
+        doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  
+        FROM documents AS doc
 	JOIN users AS u
-	ON u.id = doc.user_id where unique_id=?`, [uniqueId])
+	ON u.id = doc.user_id 
+    where unique_id=?`, [uniqueId])
         return result;
     } catch (error) {
         throw new Error('Error : ' + error)

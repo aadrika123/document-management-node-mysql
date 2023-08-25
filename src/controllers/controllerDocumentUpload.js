@@ -80,8 +80,6 @@ exports.controllerViewAllDocuments = async (req, res) => {
         const token = req?.headers?.authorization?.split(' ')[1];
         if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
         const userDetails = await decodeJWT(token)
-
-        console.log("userDetails", token)
         if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
 
 
@@ -110,7 +108,7 @@ exports.controllerViewByUniqueId = async (req, res) => {
         console.log("userDetails",userDetails)
 
         const { uniqueId } = req.body;
-        const result = await modalViewDocumentsByUniqueId(uniqueId) // called modal
+        const result = await modalViewDocumentsByUniqueId(uniqueId, userDetails?.userId) // called modal
         if (result?.length > 0) {
             const data = await addFullImagePathInData(result); // This function Add a key for full image path
             res.status(200).json({ status: true, message: "List of Documents View By Unique Id", data: data })
@@ -124,25 +122,16 @@ exports.controllerViewByUniqueId = async (req, res) => {
 
 
 // View document by referenced No
-// exports.controllerViewByReferenceNo = async (req, res) => {
-//     try {
-//         const { referenceNo } = req.body;
-//         const result = await modalViewDocumentsByReference(referenceNo) // called modal 
-//         if (result?.length > 0) {
-//             const data = await addFullImagePathInData(result); // This function Add a key for full image path
-//             res.status(200).json({ status: true, message: "Document View By Reference No", data: data })
-//         } else {
-//             res.status(200).json({ status: false, message: "No Documents found against this reference No", data: referenceNo })
-//         }
-//     } catch (error) {
-//         res.status(500).json({ status: false, message: "Error while getting data by reference no", error: error.message })
-//     }
-// }
-
 exports.controllerViewByReferenceNo = async (req, res) => {
     try {
         const { referenceNo } = req.body;
-        const result = await modalViewDocumentsByReference(referenceNo);
+        // Check Token
+        const token = req?.headers?.authorization?.split(' ')[1];
+        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
+        const userDetails = await decodeJWT(token)
+        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+
+        const result = await modalViewDocumentsByReference(referenceNo); // Call modal for fetch the data
 
         if (result?.length > 0) {
             const item = result[0]; // Since you're fetching a single document
