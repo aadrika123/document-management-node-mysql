@@ -1,12 +1,13 @@
 const crypto = require('crypto');
 const fs = require('fs');
+const { MasterData } = require('../components/MasterData');
 const { generateDocumentNumber, decodeJWT } = require('../components/MasterFunctions');
 const { documentUploadModal, modalViewAllDocuments, modalViewDocumentsByUniqueId, modalViewDocumentsByReference } = require('../modal/modalDocumentUpload');
 
 // This is function which take data and add full path of document
 const addFullImagePathInData = async (data) => {
     const fullPath = data?.map((row) => {
-        const fullPath = `http://localhost:8001/uploads/${row.file_name}`; // Replace with your actual document path logic
+        const fullPath = `${MasterData?.baseAPIUrl}/uploads/${row.file_name}`; // Replace with your actual document path logic
         return { ...row, fullPath };
     });
     return fullPath;
@@ -48,7 +49,8 @@ exports.documentUploadController = async (req, res) => {
         if (receivedDigest === computedDigest) {
             handleAfterDocDigestVerify(computedDigest)
         } else {
-            res.status(400).json({ status: false, message: 'Invalid file digest...' });
+            console.log("Both digest", receivedDigest, computedDigest)
+            res.status(400).json({ status: false, message: 'Invalid file digest...', receivedDigest, computedDigest });
         }
     });
 
@@ -105,7 +107,7 @@ exports.controllerViewByUniqueId = async (req, res) => {
         const userDetails = await decodeJWT(token)
         if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
 
-        console.log("userDetails",userDetails)
+        console.log("userDetails", userDetails)
 
         const { uniqueId } = req.body;
         const result = await modalViewDocumentsByUniqueId(uniqueId, userDetails?.userId) // called modal
@@ -159,7 +161,7 @@ exports.controllerViewByReferenceNo = async (req, res) => {
                 created_date: item.created_date,
                 last_modified: item.last_modified,
                 author: item.author,
-                fullPath: `http://localhost:8001/uploads/${item.file_name}`,
+                fullPath: `${MasterData?.baseAPIUrl}/uploads/${item.file_name}`,
                 ...attributeData
             };
 

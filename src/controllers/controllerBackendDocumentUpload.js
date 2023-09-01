@@ -1,12 +1,14 @@
 const crypto = require('crypto');
 const fs = require('fs');
+const Joi = require('joi');
+const { MasterData } = require('../components/MasterData');
 const { generateDocumentNumber, decodeJWT } = require('../components/MasterFunctions');
 const { documentUploadModal, modalViewBackendDocumentsByUniqueId, modalViewBackendDocumentsByReference } = require('../modal/modalBackendDocumentUpload');
 
 // This is function which take data and add full path of document
 const addFullImagePathInData = async (data) => {
     const fullPath = data?.map((row) => {
-        const fullPath = `http://localhost:8001/uploads/${row.file_name}`; // Replace with your actual document path logic
+        const fullPath = `${MasterData?.baseAPIUrl}/uploads/${row.file_name}`; // Replace with your actual document path logic
         return { ...row, fullPath };
     });
     return fullPath;
@@ -14,6 +16,19 @@ const addFullImagePathInData = async (data) => {
 
 // Document Upload
 exports.documentBackendUploadController = async (req, res) => {
+
+    // Validation Unique ID Start
+    const validateUploadDoc = Joi.object({
+        tags: Joi.string().required(),
+        referenceNo: Joi.string().required(),
+    }).unknown();
+    const { error, value } = validateUploadDoc.validate(req.body, { abortEarly: false });
+    if (error) {
+        const errorMessages = error.details.map(item => item.message);  //Collection Errors
+        return res.status(400).json({ error: errorMessages });
+    }
+    // Validation Unique ID End
+
     const token = req.headers.token; // Get token from header only for document upload
 
     const { tags, referenceNo } = req.body; // Get tag and Reference form request
@@ -44,8 +59,8 @@ exports.documentBackendUploadController = async (req, res) => {
             // Handle error
             return res.status(500).json({ status: false, message: 'Error reading file.' });
         }
-        // const computedDigest = crypto.createHash('SHA256').update(data).digest('hex');
-        const computedDigest = crypto.createHash('SHA256').update('123').digest('hex');
+        const computedDigest = crypto.createHash('SHA256').update(data).digest('hex');
+        // const computedDigest = crypto.createHash('SHA256').update('123').digest('hex');
 
         if (receivedDigest === computedDigest) {
             handleAfterDocDigestVerify(computedDigest)
@@ -78,6 +93,18 @@ exports.documentBackendUploadController = async (req, res) => {
 // View Documents by unique id
 exports.controllerBackendViewByUniqueId = async (req, res) => {
     try {
+
+        // Validation Unique ID Start
+        const validateUniqueId = Joi.object({
+            uniqueId: Joi.string().required(),
+        }).unknown();
+        const { error, value } = validateUniqueId.validate(req.body, { abortEarly: false });
+        if (error) {
+            const errorMessages = error.details.map(item => item.message);  //Collection Errors
+            return res.status(400).json({ error: errorMessages });
+        }
+        // Validation Unique ID End
+
         const token = req.headers.token; // Get token from header only for backend access
 
         if (!token) {
@@ -101,6 +128,18 @@ exports.controllerBackendViewByUniqueId = async (req, res) => {
 // View document by referenced No
 exports.controllerBackendViewByReferenceNo = async (req, res) => {
     try {
+
+        // Validation Start
+        const validateRefNo = Joi.object({
+            referenceNo: Joi.string().required(),
+        }).unknown();
+        const { error, value } = validateRefNo.validate(req.body, { abortEarly: false });
+        if (error) {
+            const errorMessages = error.details.map(item => item.message);  //Collection Errors
+            return res.status(400).json({ error: errorMessages });
+        }
+        // Validation End
+
         const token = req.headers.token; // Get token from header only for backend access
 
         if (!token) {
@@ -135,7 +174,7 @@ exports.controllerBackendViewByReferenceNo = async (req, res) => {
                 created_date: item.created_date,
                 last_modified: item.last_modified,
                 author: item.author,
-                fullPath: `http://localhost:8001/uploads/${item.file_name}`,
+                fullPath: `${MasterData?.baseAPIUrl}/uploads/${item.file_name}`,
                 ...attributeData
             };
 
