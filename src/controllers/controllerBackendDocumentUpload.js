@@ -18,15 +18,15 @@ const addFullImagePathInData = async (data) => {
 exports.documentBackendUploadController = async (req, res) => {
 
     // Validation Unique ID Start
-    const validateUploadDoc = Joi.object({
-        tags: Joi.string().required(),
-        referenceNo: Joi.string().required(),
-    }).unknown();
-    const { error, value } = validateUploadDoc.validate(req.body, { abortEarly: false });
-    if (error) {
-        const errorMessages = error.details.map(item => item.message);  //Collection Errors
-        return res.status(400).json({ error: errorMessages });
-    }
+    // const validateUploadDoc = Joi.object({
+    //     tags: Joi.string().required(),
+    //     referenceNo: Joi.string().required(),
+    // }).unknown();
+    // const { error, value } = validateUploadDoc.validate(req.body, { abortEarly: false });
+    // if (error) {
+    //     const errorMessages = error.details.map(item => item.message);  //Collection Errors
+    //     return res.status(400).json({ error: errorMessages });
+    // }
     // Validation Unique ID End
 
     const token = req.headers.token; // Get token from header only for document upload

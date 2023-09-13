@@ -6,5 +6,5 @@ const baseAPIUrl = "http://192.168.0.122:8001";
 exports.MasterData = {
   baseAPIUrl: baseAPIUrl,
   frontendUrl: frontendUrl,
-  serverPort: 8001
+  serverPort: 888
 };
