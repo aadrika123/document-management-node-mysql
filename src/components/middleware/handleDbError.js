@@ -8,7 +8,7 @@ const handleDatabaseError = (req, res, next) => {
       })
       .catch((error) => {
         console.error('Database connection error:', error);
-        res.status(500).json({status:false, error: 'Database Connection Failed', msg:error });
+        res.status(500).json({status:false, message: 'Database Connection Failed', data:error });
       });
   };
 
