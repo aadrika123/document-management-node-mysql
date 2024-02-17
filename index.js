@@ -45,7 +45,12 @@ app.use(handleDatabaseError);
 
 //in this the '/uploads' is route to access the file and 'uploads' is the folder where we have stored the documents.
 // app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+<<<<<<< HEAD
 app.use('/uploads', express.static('/var/Documents-Uploads'));
+=======
+app.use('/uploads', express.static('/var/database'));
+// app.use('/uploads', express.static('C:/dms/uploads'));
+>>>>>>> origin/master
 
 
 const authRoutes = require('./src/routes/routeAuth')
