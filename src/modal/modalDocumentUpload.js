@@ -4,6 +4,8 @@ const { modalMetaDataInsert } = require("./modalMetaDate");
 const { auditTrailInsert } = require("./modalAuditTrail");
 const res = require("express/lib/response");
 const url = process.env.BASEURL;
+const fs = require("fs");
+const path = require("path");
 
 // NOTE: To enable soft-delete add the `isRemoved` column to your `documents` table:
 // ALTER TABLE documents ADD COLUMN isRemoved TINYINT(1) NOT NULL DEFAULT 0;
@@ -57,7 +59,7 @@ exports.documentUploadModal = async (fileDetails) => {
     if (folderId) {
       // Ensure timestamps and soft-delete flag are set on insert
       const query =
-        "INSERT INTO documents (original_file_name, user_id, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id, isRemoved, created_date, last_modified) VALUES (?,?,?,?,?,?,?,?,?,?,?, 0, NOW(), NOW())";
+        "INSERT INTO documents (original_file_name, user_id, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id,file_type,isRemoved,  created_date, last_modified, ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0, NOW(), NOW(),)";
       const values = [
         fileDetails?.originalname,
         userId,
@@ -70,6 +72,7 @@ exports.documentUploadModal = async (fileDetails) => {
         fileDetails?.computedDigest,
         userId,
         folderId,
+        fileDetails?.mimetype,
       ];
       const result = await executeQuery(query, values);
       const documentId = result?.insertId;
@@ -111,9 +114,16 @@ exports.documentUploadModal = async (fileDetails) => {
  * @throws {Error} - If there is an error while retrieving the documents.
  */
 
-exports.modalViewAllDocuments = async (role, userId, limit, offset) => {
+exports.modalViewAllDocuments = async (
+  role,
+  userId,
+  limit,
+  offset,
+  fileTypeFilter
+) => {
   try {
     // Validate and normalize pagination inputs
+
     const DEFAULT_LIMIT = 20;
     const limitInt =
       Number.isFinite(Number(limit)) && Number(limit) > 0
@@ -128,13 +138,55 @@ exports.modalViewAllDocuments = async (role, userId, limit, offset) => {
     // Accept role as number or string (e.g., '9')
     const isAdmin = role === 9 || role === "9";
 
-    if (isAdmin) {
-      // Only count documents that are not soft-deleted
-      total = await executeQuery(
-        `SELECT COUNT(*) as count FROM documents WHERE isRemoved = 0`
-      );
-      // Interpolate sanitized integers for LIMIT/OFFSET to ensure DB applies pagination
-      result = await executeQuery(`SELECT 
+    // Build dynamic WHERE clause and params
+    const whereClauses = ["doc.isRemoved = 0"];
+    const params = [];
+
+    if (!isAdmin) {
+      whereClauses.push("doc.user_id = ?");
+      params.push(userId);
+    }
+
+    if (fileTypeFilter) {
+      const filters = String(fileTypeFilter)
+        .split(",")
+        .map((f) => f.trim())
+        .filter(Boolean);
+      if (filters.length) {
+        const filterConds = [];
+        for (const f of filters) {
+          filterConds.push("doc.file_name LIKE ?");
+          filterConds.push("doc.original_file_name LIKE ?");
+          filterConds.push("doc.file_type LIKE ?");
+          params.push(`%${f}%`, `%${f}%`, `%${f}%`);
+        }
+        whereClauses.push("(" + filterConds.join(" OR ") + ")");
+      }
+    }
+
+    const whereSQL = whereClauses.length
+      ? "WHERE " + whereClauses.join(" AND ")
+      : "";
+
+    // Count with same filters
+    total = await executeQuery(
+      `SELECT COUNT(*) as count FROM documents AS doc ${whereSQL}`,
+      params
+    );
+
+    // Calculate total size for the filtered set
+    const sizeRes = await executeQuery(
+      `SELECT COALESCE(SUM(doc.size), 0) AS totalSize FROM documents AS doc ${whereSQL}`,
+      params
+    );
+    const totalSizeBytes = Number(sizeRes?.[0]?.totalSize || 0);
+    const totalSizeMB = Number((totalSizeBytes / (1024 * 1024)).toFixed(2));
+    const totalSizeGB = Number(
+      (totalSizeBytes / (1024 * 1024 * 1024)).toFixed(3)
+    );
+
+    // Fetch rows with same filters + pagination
+    const query = `SELECT 
             doc.original_file_name, 
             doc.unique_id, 
             doc.hash, 
@@ -147,37 +199,20 @@ exports.modalViewAllDocuments = async (role, userId, limit, offset) => {
             FROM documents AS doc
             JOIN users AS u
             ON u.id = doc.user_id
-            WHERE doc.isRemoved = 0
+            ${whereSQL}
             ORDER BY doc.created_date DESC
-            LIMIT ${limitInt} OFFSET ${offsetInt}`);
-    } else {
-      // Only count user's documents that are not soft-deleted
-      total = await executeQuery(
-        `SELECT COUNT(*) as count FROM documents WHERE user_id=? AND isRemoved = 0`,
-        [userId]
-      );
-      result = await executeQuery(
-        `SELECT 
-            doc.original_file_name, 
-            doc.unique_id, 
-            doc.hash, 
-            doc.file_name, 
-            doc.size, 
-            doc.file_type, 
-            doc.reference_no, 
-            doc.created_date, 
-            doc.last_modified, CONCAT(u.first_name, ' ' ,u.last_name) AS author  
-            FROM documents AS doc
-            JOIN users AS u
-            ON u.id = doc.user_id 
-            WHERE user_id=? AND doc.isRemoved = 0
-            ORDER BY doc.created_date DESC
-            LIMIT ${limitInt} OFFSET ${offsetInt}`,
-        [userId]
-      );
-    }
+            LIMIT ? OFFSET ?`;
 
-    return { documents: result, total: total[0].count };
+    const rowsParams = params.concat([limitInt, offsetInt]);
+    result = await executeQuery(query, rowsParams);
+
+    return {
+      documents: result,
+      total: total[0].count,
+      totalSizeBytes,
+      totalSizeMB,
+      totalSizeGB,
+    };
   } catch (error) {
     console.error("Error in Modal while fetching doc list", error);
     throw new Error("Error doc list fetch in Modal : " + error);
@@ -329,6 +364,151 @@ exports.modalSoftDeleteByUniqueId = async (uniqueId, userId, role) => {
     return {
       affectedRows: result?.affectedRows || 0,
       success: (result?.affectedRows || 0) > 0,
+    };
+  } catch (error) {
+    throw new Error("Error : " + error);
+  }
+};
+
+// Recover document by numeric id or unique_id (set isRemoved = 0)
+exports.modalRecoverByIdentifier = async (identifier, userId, role) => {
+  try {
+    const isAdmin = role === 9 || role === "9";
+    const isNumericId = String(identifier).match(/^\d+$/) !== null;
+
+    let result;
+    if (isAdmin) {
+      if (isNumericId) {
+        result = await executeQuery(
+          `UPDATE documents SET isRemoved = 0, last_modified = NOW() WHERE id = ? AND isRemoved = 1`,
+          [identifier]
+        );
+      } else {
+        result = await executeQuery(
+          `UPDATE documents SET isRemoved = 0, last_modified = NOW() WHERE unique_id = ? AND isRemoved = 1`,
+          [identifier]
+        );
+      }
+    } else {
+      if (isNumericId) {
+        result = await executeQuery(
+          `UPDATE documents SET isRemoved = 0, last_modified = NOW() WHERE id = ? AND user_id = ? AND isRemoved = 1`,
+          [identifier, userId]
+        );
+      } else {
+        result = await executeQuery(
+          `UPDATE documents SET isRemoved = 0, last_modified = NOW() WHERE unique_id = ? AND user_id = ? AND isRemoved = 1`,
+          [identifier, userId]
+        );
+      }
+    }
+
+    return {
+      affectedRows: result?.affectedRows || 0,
+      success: (result?.affectedRows || 0) > 0,
+    };
+  } catch (error) {
+    throw new Error("Error : " + error);
+  }
+};
+
+// Permanently delete documents by unique id. Only deletes documents that are soft-deleted (isRemoved = 1).
+// Admins can delete any; non-admins can only delete their own documents.
+exports.modalPermanentDeleteByUniqueId = async (uniqueId, userId, role) => {
+  try {
+    const isAdmin = role === 9 || role === "9";
+
+    // Fetch documents (all versions) matching the unique_id and soft-deleted
+    let docs;
+    if (isAdmin) {
+      docs = await executeQuery(
+        `SELECT id, file_name, path_id FROM documents WHERE unique_id = ? AND isRemoved = 1`,
+        [uniqueId]
+      );
+    } else {
+      docs = await executeQuery(
+        `SELECT id, file_name, path_id FROM documents WHERE unique_id = ? AND user_id = ? AND isRemoved = 1`,
+        [uniqueId, userId]
+      );
+    }
+
+    if (!docs || docs.length === 0) {
+      return {
+        success: false,
+        message: "No documents found to delete",
+        affectedRows: 0,
+      };
+    }
+
+    // Delete associated files and meta_data per document
+    for (const doc of docs) {
+      try {
+        // Attempt to get folder path
+        const folderRes = await executeQuery(
+          `SELECT folder_path FROM folder_paths WHERE id = ?`,
+          [doc.path_id]
+        );
+        const folderPath = folderRes?.[0]?.folder_path;
+        if (folderPath && doc.file_name) {
+          const filePath = path.join(folderPath, doc.file_name);
+          try {
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          } catch (fsErr) {
+            console.error(
+              "modalPermanentDeleteByUniqueId: error deleting file",
+              filePath,
+              fsErr
+            );
+            // continue even if file delete fails
+          }
+        }
+
+        // Delete metadata for this document id
+        await executeQuery(`DELETE FROM meta_data WHERE document_id = ?`, [
+          doc.id,
+        ]);
+      } catch (innerErr) {
+        console.error(
+          "modalPermanentDeleteByUniqueId: error processing document",
+          doc,
+          innerErr
+        );
+      }
+    }
+
+    // Delete document rows (all versions) - ensure admin/non-admin constraint
+    let deleteResult;
+    if (isAdmin) {
+      deleteResult = await executeQuery(
+        `DELETE FROM documents WHERE unique_id = ?`,
+        [uniqueId]
+      );
+    } else {
+      deleteResult = await executeQuery(
+        `DELETE FROM documents WHERE unique_id = ? AND user_id = ?`,
+        [uniqueId, userId]
+      );
+    }
+
+    // Audit trail
+    try {
+      await auditTrailInsert(
+        userId,
+        null,
+        `Permanently deleted document(s) for unique_id: ${uniqueId}`
+      );
+    } catch (auditErr) {
+      console.error(
+        "modalPermanentDeleteByUniqueId: audit insert failed",
+        auditErr
+      );
+    }
+
+    return {
+      success: (deleteResult?.affectedRows || 0) > 0,
+      affectedRows: deleteResult?.affectedRows || 0,
     };
   } catch (error) {
     throw new Error("Error : " + error);

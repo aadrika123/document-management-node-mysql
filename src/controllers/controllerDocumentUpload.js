@@ -12,6 +12,8 @@ const {
   modalViewDocumentsByUniqueId,
   modalViewDocumentsByReference,
   modalSoftDeleteByUniqueId,
+  modalPermanentDeleteByUniqueId,
+  modalRecoverByIdentifier,
 } = require("../modal/modalDocumentUpload");
 
 // This is function which take data and add full path of document
@@ -26,6 +28,8 @@ const addFullImagePathInData = async (data) => {
 // Document Upload
 exports.documentUploadController = async (req, res) => {
   const token = req.headers.token; // Get token from header only for document upload
+
+  // console.log("receivedFile", req.file);
 
   const { tags, referenceNo } = req.body; // Get tag and Reference form request
 
@@ -59,8 +63,6 @@ exports.documentUploadController = async (req, res) => {
   } = receivedFile; // File Details
 
   const filePath = receivedFile.path;
-
-  console.log("receivedFile", receivedFile);
 
   // Read the file using fs.readFile
   fs.readFile(filePath, (err, data) => {
@@ -147,12 +149,14 @@ exports.controllerViewAllDocuments = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const page = parseInt(req.query.page) || 1;
     const offset = (page - 1) * limit;
+    const fileType = req.query.fileType || req.query.filetype || null; // accept fileType query param (comma-separated)
 
     const result = await modalViewAllDocuments(
       userDetails?.type,
       userDetails?.userId,
       limit,
-      offset
+      offset,
+      fileType
     );
 
     if (result?.documents?.length > 0) {
@@ -162,6 +166,10 @@ exports.controllerViewAllDocuments = async (req, res) => {
         status: true,
         message: "List of Documents",
         data: data,
+        size: {
+          mb: result.totalSizeMB || 0,
+          gb: result.totalSizeGB || 0,
+        },
         pagination: {
           currentPage: page,
           totalPages: totalPages,
@@ -174,6 +182,7 @@ exports.controllerViewAllDocuments = async (req, res) => {
         status: false,
         message: "No Documents found",
         data: [],
+        size: { bytes: 0, mb: 0, gb: 0 },
         pagination: {
           currentPage: page,
           totalPages: 0,
@@ -405,6 +414,101 @@ exports.controllerSoftDeleteByUniqueId = async (req, res) => {
     res.status(500).json({
       status: false,
       message: "Error while soft deleting document",
+      error: error.message,
+    });
+  }
+};
+
+// Recover (restore) a document by id or uniqueId (set isRemoved = 0)
+exports.controllerRecoverDocument = async (req, res) => {
+  try {
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(401)
+        .json({ status: false, message: "Please Send token" });
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res.status(401).json({ status: false, message: "Invalid Token" });
+
+    // Accept either numeric id or uniqueId
+    const { id, uniqueId, identifier } = req.body;
+    const identifierValue = id || uniqueId || identifier;
+    if (!identifierValue)
+      return res
+        .status(400)
+        .json({ status: false, message: "Please provide id or uniqueId" });
+
+    const result = await modalRecoverByIdentifier(
+      identifierValue,
+      userDetails?.userId,
+      userDetails?.type
+    );
+
+    if (result?.success) {
+      return res.status(200).json({
+        status: true,
+        message: "Document recovered",
+        data: { identifier: identifierValue },
+      });
+    } else {
+      return res.status(404).json({
+        status: false,
+        message: "Document not found or not authorized",
+        data: { identifier: identifierValue },
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while recovering document",
+      error: error.message,
+    });
+  }
+};
+
+// Permanently delete documents by uniqueId (only deletes soft-deleted documents)
+exports.controllerPermanentDeleteByUniqueId = async (req, res) => {
+  try {
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(401)
+        .json({ status: false, message: "Please Send token" });
+
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res.status(401).json({ status: false, message: "Invalid Token" });
+
+    const { uniqueId } = req.body;
+    if (!uniqueId)
+      return res
+        .status(400)
+        .json({ status: false, message: "Please provide uniqueId" });
+
+    const result = await modalPermanentDeleteByUniqueId(
+      uniqueId,
+      userDetails?.userId,
+      userDetails?.type
+    );
+
+    if (result?.success) {
+      return res.status(200).json({
+        status: true,
+        message: "Document(s) permanently deleted",
+        data: { uniqueId, affectedRows: result.affectedRows },
+      });
+    } else {
+      return res.status(404).json({
+        status: false,
+        message: result?.message || "Document not found or not authorized",
+        data: { uniqueId },
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while permanently deleting document",
       error: error.message,
     });
   }
