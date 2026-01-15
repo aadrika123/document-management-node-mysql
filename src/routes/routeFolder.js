@@ -12,7 +12,7 @@ router.route('/view-all').post(viewFoldersController);
 
 
 // Serve static files from the specified directory
-const dmsFolderPath = 'C:/dms';
+const dmsFolderPath = 'C:/var';
 
 function calculateDirectorySize(directoryPath) {
     let totalSize = 0;

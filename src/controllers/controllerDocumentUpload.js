@@ -1,178 +1,411 @@
-const crypto = require('crypto');
-const fs = require('fs');
-const { MasterData } = require('../components/MasterData');
-const { generateDocumentNumber, decodeJWT } = require('../components/MasterFunctions');
-const { documentUploadModal, modalViewAllDocuments, modalViewDocumentsByUniqueId, modalViewDocumentsByReference } = require('../modal/modalDocumentUpload');
+const crypto = require("crypto");
+const fs = require("fs");
+const { MasterData } = require("../components/MasterData");
+const {
+  generateDocumentNumber,
+  decodeJWT,
+} = require("../components/MasterFunctions");
+const {
+  documentUploadModal,
+  modalViewAllDocuments,
+  modalViewRemovedDocuments,
+  modalViewDocumentsByUniqueId,
+  modalViewDocumentsByReference,
+  modalSoftDeleteByUniqueId,
+} = require("../modal/modalDocumentUpload");
 
 // This is function which take data and add full path of document
 const addFullImagePathInData = async (data) => {
-    const fullPath = data?.map((row) => {
-        const fullPath = `${MasterData?.baseAPIUrl}/uploads/${row.file_name}`; // Replace with your actual document path logic
-        return { ...row, fullPath };
-    });
-    return fullPath;
-}
+  const fullPath = data?.map((row) => {
+    const fullPath = `${MasterData?.baseAPIUrl}/uploads/${row.file_name}`; // Replace with your actual document path logic
+    return { ...row, fullPath };
+  });
+  return fullPath;
+};
 
 // Document Upload
 exports.documentUploadController = async (req, res) => {
-    const token = req.headers.token; // Get token from header only for document upload
+  const token = req.headers.token; // Get token from header only for document upload
 
-    const { tags, referenceNo } = req.body; // Get tag and Reference form request
+  const { tags, referenceNo } = req.body; // Get tag and Reference form request
 
-    if (!req.file || !req.headers['x-digest']) {
-        // File or digest is missing, handle the error
-        res.status(400).json({ status: false, message: 'File or digest is missing.', file: req.file, header: req.headers['x-digest'] });
-        return;
-    }
-    if (!token) {
-        return res.status(400).json({ status: false, message: 'Token is require.' });
-    }
-
-    const receivedDigest = req.headers['x-digest']; // Assuming the digest is sent as a request header
-    const receivedFile = req.file;// File path of the uploaded file
-    const ipAddress = req.connection.remoteAddress; // Get IP Address
-    const { originalname, encoding, mimetype, destination, filename, path, size } = receivedFile; // File Details
-
-    const filePath = receivedFile.path;
-
-    console.log("receivedFile", receivedFile)
-
-    // Read the file using fs.readFile
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
-            // Handle error
-            return res.status(500).json({ status: false, message: 'Error reading file.' });
-        }
-        const computedDigest = crypto.createHash('SHA256').update(data).digest('hex');
-        // const computedDigest = crypto.createHash('SHA256').update('123').digest('hex');
-
-        if (receivedDigest === computedDigest) {
-            handleAfterDocDigestVerify(computedDigest)
-        } else {
-            console.log("Both digest", receivedDigest, computedDigest)
-            res.status(400).json({ status: false, message: 'Invalid file digest...', receivedDigest, computedDigest });
-        }
+  if (!req.file || !req.headers["x-digest"]) {
+    // File or digest is missing, handle the error
+    res.status(400).json({
+      status: false,
+      message: "File or digest is missing.",
+      file: req.file,
+      header: req.headers["x-digest"],
     });
+    return;
+  }
+  if (!token) {
+    return res
+      .status(400)
+      .json({ status: false, message: "Token is require." });
+  }
 
-    const handleAfterDocDigestVerify = async (computedDigest) => {
+  const receivedDigest = req.headers["x-digest"]; // Assuming the digest is sent as a request header
+  const receivedFile = req.file; // File path of the uploaded file
+  const ipAddress = req.connection.remoteAddress; // Get IP Address
+  const {
+    originalname,
+    encoding,
+    mimetype,
+    destination,
+    filename,
+    path,
+    size,
+  } = receivedFile; // File Details
 
-        const generateRefNo = "REF" + Date.now(); // Generate Reference Number
-        const uniqueNo = await generateDocumentNumber(8) //Generate Unique No of 8 character for every Document
+  const filePath = receivedFile.path;
 
-        const fileDetails = { refNo: generateRefNo, originalname: originalname, encoding: encoding, mimetype: mimetype, destination: destination, filename: filename, path: path, size: size, ipAddress, tags, token, computedDigest, referenceNo, uniqueNo }
+  console.log("receivedFile", receivedFile);
 
-        //Generate Reference Number everting when document is going to upload.
-        try {
-            const result = await documentUploadModal(fileDetails);
-            if (result) {
-                res.status(201).json({ status: result.status, message: result.message, data: result.data });
-            }
-        } catch (error) {
-            console.error('Catch Error upload document', error);
-            res.status(500).json({ error: 'Internal Server Error controller Document upload', msg: error.message });
-        }
+  // Read the file using fs.readFile
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      // Handle error
+      return res
+        .status(500)
+        .json({ status: false, message: "Error reading file." });
     }
-}
+    const computedDigest = crypto
+      .createHash("SHA256")
+      .update(data)
+      .digest("hex");
+    // const computedDigest = crypto.createHash('SHA256').update('123').digest('hex');
 
+    if (receivedDigest === computedDigest) {
+      handleAfterDocDigestVerify(computedDigest);
+    } else {
+      console.log("Both digest", receivedDigest, computedDigest);
+      res.status(400).json({
+        status: false,
+        message: "Invalid file digest...",
+        receivedDigest,
+        computedDigest,
+      });
+    }
+  });
+
+  const handleAfterDocDigestVerify = async (computedDigest) => {
+    const generateRefNo = "REF" + Date.now(); // Generate Reference Number
+    const uniqueNo = await generateDocumentNumber(8); //Generate Unique No of 8 character for every Document
+
+    const fileDetails = {
+      refNo: generateRefNo,
+      originalname: originalname,
+      encoding: encoding,
+      mimetype: mimetype,
+      destination: destination,
+      filename: filename,
+      path: path,
+      size: size,
+      ipAddress,
+      tags,
+      token,
+      computedDigest,
+      referenceNo,
+      uniqueNo,
+    };
+
+    //Generate Reference Number everting when document is going to upload.
+    try {
+      const result = await documentUploadModal(fileDetails);
+      if (result) {
+        res.status(201).json({
+          status: result.status,
+          message: result.message,
+          data: result.data,
+        });
+      }
+    } catch (error) {
+      console.error("Catch Error upload document", error);
+      res.status(500).json({
+        error: "Internal Server Error controller Document upload",
+        msg: error.message,
+      });
+    }
+  };
+};
 
 // View All the documents
 exports.controllerViewAllDocuments = async (req, res) => {
-    try {
-        // Check Token
-        const token = req?.headers?.authorization?.split(' ')[1];
-        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
-        const userDetails = await decodeJWT(token)
-        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+  try {
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(201)
+        .json({ status: false, message: "Please Send token", data: [] });
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res
+        .status(201)
+        .json({ status: false, message: "Invalid Token", data: [] });
 
+    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page) || 1;
+    const offset = (page - 1) * limit;
 
-        const result = await modalViewAllDocuments(userDetails?.type, userDetails?.userId); // called modal for view all documents
-        if (result?.length > 0) {
-            const data = await addFullImagePathInData(result); // This function Add a key for full image path
-            res.status(200).json({ status: true, message: "List of Documents", data: data })
-        } else {
-            res.status(200).json({ status: false, message: "No Documents found", data: [] })
-        }
-    } catch (error) {
-        res.status(500).json({ status: false, message: "Error while fetching all document", error: error.message })
+    const result = await modalViewAllDocuments(
+      userDetails?.type,
+      userDetails?.userId,
+      limit,
+      offset
+    );
+
+    if (result?.documents?.length > 0) {
+      const data = await addFullImagePathInData(result.documents);
+      const totalPages = Math.ceil(result.total / limit);
+      res.status(200).json({
+        status: true,
+        message: "List of Documents",
+        data: data,
+        pagination: {
+          currentPage: page,
+          totalPages: totalPages,
+          totalDocuments: result.total,
+          limit: limit,
+        },
+      });
+    } else {
+      res.status(200).json({
+        status: false,
+        message: "No Documents found",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          totalDocuments: 0,
+          limit: limit,
+        },
+      });
     }
-}
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while fetching all document",
+      error: error.message,
+    });
+  }
+};
+
+// View removed (soft-deleted) documents
+exports.controllerViewRemovedDocuments = async (req, res) => {
+  try {
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(201)
+        .json({ status: false, message: "Please Send token", data: [] });
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res
+        .status(201)
+        .json({ status: false, message: "Invalid Token", data: [] });
+
+    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page) || 1;
+    const offset = (page - 1) * limit;
+
+    const result = await modalViewRemovedDocuments(
+      userDetails?.type,
+      userDetails?.userId,
+      limit,
+      offset
+    );
+
+    if (result?.documents?.length > 0) {
+      const data = await addFullImagePathInData(result.documents);
+      const totalPages = Math.ceil(result.total / limit);
+      res.status(200).json({
+        status: true,
+        message: "List of Removed Documents",
+        data: data,
+        pagination: {
+          currentPage: page,
+          totalPages: totalPages,
+          totalDocuments: result.total,
+          limit: limit,
+        },
+      });
+    } else {
+      res.status(200).json({
+        status: false,
+        message: "No Removed Documents found",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          totalDocuments: 0,
+          limit: limit,
+        },
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while fetching removed documents",
+      error: error.message,
+    });
+  }
+};
 
 // View Documents by unique id
 exports.controllerViewByUniqueId = async (req, res) => {
-    try {
+  try {
+    // Check Token
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(201)
+        .json({ status: false, message: "Please Send token", data: [] });
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res
+        .status(201)
+        .json({ status: false, message: "Invalid Token", data: [] });
 
-        // Check Token
-        const token = req?.headers?.authorization?.split(' ')[1];
-        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
-        const userDetails = await decodeJWT(token)
-        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+    console.log("userDetails", userDetails);
 
-        console.log("userDetails", userDetails)
-
-        const { uniqueId } = req.body;
-        const result = await modalViewDocumentsByUniqueId(uniqueId, userDetails?.userId) // called modal
-        if (result?.length > 0) {
-            const data = await addFullImagePathInData(result); // This function Add a key for full image path
-            res.status(200).json({ status: true, message: "List of Documents View By Unique Id", data: data })
-        } else {
-            res.status(200).json({ status: false, message: "No Documents found", data: result })
-        }
-    } catch (error) {
-        res.status(500).json({ status: false, message: "Error while fetching by uid document", error: error.message })
+    const { uniqueId } = req.body;
+    const result = await modalViewDocumentsByUniqueId(
+      uniqueId,
+      userDetails?.userId
+    ); // called modal
+    if (result?.length > 0) {
+      const data = await addFullImagePathInData(result); // This function Add a key for full image path
+      res.status(200).json({
+        status: true,
+        message: "List of Documents View By Unique Id",
+        data: data,
+      });
+    } else {
+      res
+        .status(200)
+        .json({ status: false, message: "No Documents found", data: result });
     }
-}
-
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while fetching by uid document",
+      error: error.message,
+    });
+  }
+};
 
 // View document by referenced No
 exports.controllerViewByReferenceNo = async (req, res) => {
-    try {
-        const { referenceNo } = req.body;
-        // Check Token
-        const token = req?.headers?.authorization?.split(' ')[1];
-        if (!token) return res.status(201).json({ "status": false, message: "Please Send token", data: [] });
-        const userDetails = await decodeJWT(token)
-        if (!userDetails) return res.status(201).json({ "status": false, message: "Invalid Token", data: [] });
+  try {
+    const { referenceNo } = req.body;
+    // Check Token
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(201)
+        .json({ status: false, message: "Please Send token", data: [] });
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res
+        .status(201)
+        .json({ status: false, message: "Invalid Token", data: [] });
 
-        const result = await modalViewDocumentsByReference(referenceNo); // Call modal for fetch the data
+    const result = await modalViewDocumentsByReference(referenceNo); // Call modal for fetch the data
 
-        if (result?.length > 0) {
-            const item = result[0]; // Since you're fetching a single document
-            const attributes = item.attributes.split(',');
-            const attributeValues = item.attribute_values.split(',');
+    if (result?.length > 0) {
+      const item = result[0]; // Since you're fetching a single document
+      const attributes = item.attributes.split(",");
+      const attributeValues = item.attribute_values.split(",");
 
-            const attributeData = {};
-            attributes.forEach((attribute, index) => {
-                attributeData[attribute] = attributeValues[index];
-            });
+      const attributeData = {};
+      attributes.forEach((attribute, index) => {
+        attributeData[attribute] = attributeValues[index];
+      });
 
-            const documentData = {
-                id: item.id,
-                document_id: item.document_id,
-                originalname: item.original_file_name,
-                original_file_name: item.original_file_name,
-                encoding: item.encoding,
-                mimetype: item.mimetype,
-                size: item.doc_size, // Using doc_size from your query result
-                unique_id: item.unique_id,
-                hash: item.hash,
-                file_name: item.file_name,
-                file_type: item.file_type,
-                reference_no: item.reference_no,
-                created_date: item.created_date,
-                last_modified: item.last_modified,
-                author: item.author,
-                fullPath: `${MasterData?.baseAPIUrl}/uploads/${item.file_name}`,
-                ...attributeData
-            };
+      const documentData = {
+        id: item.id,
+        document_id: item.document_id,
+        originalname: item.original_file_name,
+        original_file_name: item.original_file_name,
+        encoding: item.encoding,
+        mimetype: item.mimetype,
+        size: item.doc_size, // Using doc_size from your query result
+        unique_id: item.unique_id,
+        hash: item.hash,
+        file_name: item.file_name,
+        file_type: item.file_type,
+        reference_no: item.reference_no,
+        created_date: item.created_date,
+        last_modified: item.last_modified,
+        author: item.author,
+        fullPath: `${MasterData?.baseAPIUrl}/uploads/${item.file_name}`,
+        ...attributeData,
+      };
 
-            res.status(200).json({ status: true, message: "Document View By Reference No", data: documentData });
-        } else {
-            res.status(200).json({ status: false, message: "No Documents found against this reference No", data: referenceNo });
-        }
-    } catch (error) {
-        res.status(500).json({ status: false, message: "Error while getting data by reference no", error: error.message });
+      res.status(200).json({
+        status: true,
+        message: "Document View By Reference No",
+        data: documentData,
+      });
+    } else {
+      res.status(200).json({
+        status: false,
+        message: "No Documents found against this reference No",
+        data: referenceNo,
+      });
     }
-}
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while getting data by reference no",
+      error: error.message,
+    });
+  }
+};
 
+// Soft delete document by unique id (mark as removed)
+exports.controllerSoftDeleteByUniqueId = async (req, res) => {
+  try {
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(401)
+        .json({ status: false, message: "Please Send token" });
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res.status(401).json({ status: false, message: "Invalid Token" });
 
+    const { uniqueId } = req.body;
+    if (!uniqueId)
+      return res
+        .status(400)
+        .json({ status: false, message: "Please provide uniqueId" });
 
+    const result = await modalSoftDeleteByUniqueId(
+      uniqueId,
+      userDetails?.userId,
+      userDetails?.type
+    );
+
+    if (result?.success) {
+      return res.status(200).json({
+        status: true,
+        message: "Document soft-deleted",
+        data: { uniqueId },
+      });
+    } else {
+      return res.status(404).json({
+        status: false,
+        message: "Document not found or not authorized",
+        data: { uniqueId },
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while soft deleting document",
+      error: error.message,
+    });
+  }
+};
