@@ -51,7 +51,7 @@ exports.documentUploadModal = async (fileDetails) => {
     if (folderId) {
       // ensure timestamps and soft-delete flag are set
       const query =
-        "INSERT INTO documents (original_file_name, user_id, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id, isRemoved, created_date, last_modified) VALUES (?,?,?,?,?,?,?,?,?,?,?, 0, NOW(), NOW())";
+        "INSERT INTO documents (original_file_name, user_id, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id,file_type, isRemoved, created_date, last_modified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0, NOW(), NOW())";
       const values = [
         fileDetails?.originalname,
         userId,
@@ -64,6 +64,7 @@ exports.documentUploadModal = async (fileDetails) => {
         fileDetails?.computedDigest,
         userId,
         folderId,
+        fileDetails.mimetype,
       ];
       const result = await executeQuery(query, values);
       const documentId = result?.insertId;
@@ -112,8 +113,8 @@ exports.modalViewBackendDocumentsByUniqueId = async (uniqueId, token) => {
         doc.last_modified, 
         CONCAT(u.first_name, ' ' ,u.last_name) AS author  
         FROM documents AS doc
-	JOIN users AS u
-	ON u.id = doc.user_id where unique_id=? AND u.secret_key=? AND doc.isRemoved = 0`,
+	      JOIN users AS u
+	      ON u.id = doc.user_id where unique_id=? AND u.secret_key=? AND doc.isRemoved = 0`,
       [uniqueId, token]
     );
     return result;
