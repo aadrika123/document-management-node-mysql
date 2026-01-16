@@ -59,47 +59,53 @@ exports.documentUploadModal = async (fileDetails) => {
     if (folderId) {
       // Ensure timestamps and soft-delete flag are set on insert
       const query =
-        "INSERT INTO documents (original_file_name, user_id, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id,file_type,isRemoved,  created_date, last_modified, ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0, NOW(), NOW(),)";
+        "INSERT INTO documents (original_file_name, user_id, unique_id, file_name, size, path_id, reference_no, version, hash, author, parent_folder_id, file_type, isRemoved, created_date, last_modified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, NOW(), NOW())";
       const values = [
         fileDetails?.originalname,
         userId,
         uniqueId,
         fileDetails?.filename,
         fileDetails?.size,
-        1,
-        fileDetails.refNo,
+        1, // path_id (legacy default - adjust if your path_id should map to folder_paths)
+        fileDetails?.refNo,
         version,
         fileDetails?.computedDigest,
         userId,
-        folderId,
+        folderId, // parent_folder_id
         fileDetails?.mimetype,
+        0, // isRemoved default
       ];
       const result = await executeQuery(query, values);
       const documentId = result?.insertId;
       console.log("documentUploadModal: insertedId=", documentId);
       if (documentId) {
         // It will give id document where is uploaded
-        const updateMetaData = await modalMetaDataInsert(
+        await modalMetaDataInsert(documentId, fileDetails); // Insert Meta Data in Database (documentId, fileDetails)
+
+        await auditTrailInsert(
+          userId,
           documentId,
-          fileDetails
-        ); // Insert Meta Data in Database (documentId, fileDetails)
-      }
-      const resultAuditTrail = await auditTrailInsert(
-        userId,
-        documentId,
-        `Document Uploaded : ${fileDetails?.filename}`
-      ); // Create Log - (userId, documentId, action)
-      if (result?.affectedRows)
+          `Document Uploaded : ${fileDetails?.filename}`
+        ); // Create Log - (userId, documentId, action)
+
+        // Commit the transaction if everything is successful
+        await executeQuery("COMMIT");
+
+        if (result?.affectedRows)
+          return {
+            status: true,
+            message: "Document Upload Success.",
+            data: { ReferenceNo: fileDetails.refNo, uniqueId: uniqueId },
+          };
+      } else {
+        // Nothing was inserted; rollback and return error
+        await executeQuery("ROLLBACK");
         return {
-          status: true,
-          message: "Document Upload Success.",
-          data: { ReferenceNo: fileDetails.refNo, uniqueId: uniqueId },
+          status: false,
+          message: "Folder Not Found against this token!",
         };
-    } else {
-      return { status: false, message: "Folder Not Found against this token!" };
-    }
-    // Commit the transaction if everything is successful
-    await executeQuery("COMMIT");
+      }
+    } // end if (folderId)
   } catch (error) {
     await executeQuery("ROLLBACK");
     console.error("Error Document upload", error);
@@ -119,7 +125,8 @@ exports.modalViewAllDocuments = async (
   userId,
   limit,
   offset,
-  fileTypeFilter
+  fileTypeFilter,
+  uniqueId
 ) => {
   try {
     // Validate and normalize pagination inputs
@@ -147,19 +154,108 @@ exports.modalViewAllDocuments = async (
       params.push(userId);
     }
 
+    if (uniqueId) {
+      whereClauses.push("doc.unique_id = ?");
+      params.push(uniqueId);
+    }
+
     if (fileTypeFilter) {
       const filters = String(fileTypeFilter)
         .split(",")
         .map((f) => f.trim())
         .filter(Boolean);
       if (filters.length) {
+        const fileTypeMap = {
+          pdf: { exts: ["%.pdf"], types: ["%pdf%"] },
+          png: { exts: ["%.png"], types: ["%png%"] },
+          jpg: { exts: ["%.jpg", "%.jpeg"], types: ["%jpeg%", "%jpg%"] },
+          jpeg: { exts: ["%.jpg", "%.jpeg"], types: ["%jpeg%", "%jpg%"] },
+          gif: { exts: ["%.gif"], types: ["%gif%"] },
+          doc: { exts: ["%.doc", "%.docx"], types: ["%doc%", "%word%"] },
+          docx: { exts: ["%.doc", "%.docx"], types: ["%doc%", "%word%"] },
+          excel: {
+            exts: ["%.xls", "%.xlsx"],
+            types: ["%xls%", "%excel%", "%spreadsheet%"],
+          },
+          ppt: { exts: ["%.ppt", "%.pptx"], types: ["%ppt%"] },
+          txt: { exts: ["%.txt"], types: ["%txt%", "%text%"] },
+          archive: { exts: ["%.zip", "%.rar"], types: ["%zip%", "%rar%"] },
+        };
+
         const filterConds = [];
-        for (const f of filters) {
-          filterConds.push("doc.file_name LIKE ?");
-          filterConds.push("doc.original_file_name LIKE ?");
-          filterConds.push("doc.file_type LIKE ?");
-          params.push(`%${f}%`, `%${f}%`, `%${f}%`);
+
+        for (const fRaw of filters) {
+          const f = (fRaw || "").toLowerCase();
+
+          if (f === "other") {
+            // 'other' should exclude all known extensions/types
+            const knownExts = [
+              "%.pdf",
+              "%.png",
+              "%.jpg",
+              "%.jpeg",
+              "%.gif",
+              "%.doc",
+              "%.docx",
+              "%.xls",
+              "%.xlsx",
+              "%.ppt",
+              "%.pptx",
+              "%.txt",
+              "%.zip",
+              "%.rar",
+            ];
+            const knownTypePats = [
+              "%pdf%",
+              "%png%",
+              "%jpeg%",
+              "%gif%",
+              "%doc%",
+              "%xls%",
+              "%ppt%",
+              "%txt%",
+              "%zip%",
+              "%rar%",
+            ];
+            const negConds = [];
+            for (const ext of knownExts) {
+              negConds.push("LOWER(doc.file_name) NOT LIKE ?");
+              negConds.push("LOWER(doc.original_file_name) NOT LIKE ?");
+              params.push(ext, ext);
+            }
+            for (const tp of knownTypePats) {
+              negConds.push("LOWER(doc.file_type) NOT LIKE ?");
+              params.push(tp);
+            }
+            filterConds.push("(" + negConds.join(" AND ") + ")");
+            continue;
+          }
+
+          const map = fileTypeMap[f];
+          if (map) {
+            const sub = [];
+            for (const ext of map.exts) {
+              sub.push("LOWER(doc.file_name) LIKE ?");
+              sub.push("LOWER(doc.original_file_name) LIKE ?");
+              params.push(ext, ext);
+            }
+            for (const tpat of map.types) {
+              sub.push("LOWER(doc.file_type) LIKE ?");
+              params.push(tpat);
+            }
+            filterConds.push("(" + sub.join(" OR ") + ")");
+          } else {
+            // fallback: match extension or file_type contains token
+            const sub = [
+              "LOWER(doc.file_name) LIKE ?",
+              "LOWER(doc.original_file_name) LIKE ?",
+              "LOWER(doc.file_type) LIKE ?",
+            ];
+            params.push(`%.${f}`, `%.${f}`, `%${f}%`);
+            filterConds.push("(" + sub.join(" OR ") + ")");
+          }
         }
+
         whereClauses.push("(" + filterConds.join(" OR ") + ")");
       }
     }
@@ -512,5 +608,131 @@ exports.modalPermanentDeleteByUniqueId = async (uniqueId, userId, role) => {
     };
   } catch (error) {
     throw new Error("Error : " + error);
+  }
+};
+
+// Dashboard Modal: aggregates totals, trends, and distributions for UI dashboard
+exports.modalGetDashboard = async (role, userId) => {
+  try {
+    const isAdmin = role === 9 || role === "9";
+    const baseWhere = "WHERE doc.isRemoved = 0";
+
+    const userWhere = isAdmin ? baseWhere : baseWhere + " AND doc.user_id = ?";
+    const userParams = isAdmin ? [] : [userId];
+
+    // Total files
+    const totalFilesRes = await executeQuery(
+      `SELECT COUNT(*) AS count FROM documents AS doc ${userWhere}`,
+      userParams
+    );
+    const totalFiles = Number(totalFilesRes?.[0]?.count || 0);
+
+    // Total size bytes
+    const totalSizeRes = await executeQuery(
+      `SELECT COALESCE(SUM(doc.size),0) AS totalSize FROM documents AS doc ${userWhere}`,
+      userParams
+    );
+    const totalSizeBytes = Number(totalSizeRes?.[0]?.totalSize || 0);
+
+    // Files this week (last 7 days)
+    const filesThisWeekRes = await executeQuery(
+      `SELECT COUNT(*) AS count FROM documents AS doc ${userWhere} AND doc.created_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`,
+      userParams
+    );
+    const filesThisWeek = Number(filesThisWeekRes?.[0]?.count || 0);
+
+    // Files in previous week (7-14 days ago)
+    const prevWeekRes = await executeQuery(
+      `SELECT COUNT(*) AS count FROM documents AS doc ${userWhere} AND doc.created_date >= DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND doc.created_date < DATE_SUB(CURDATE(), INTERVAL 7 DAY)`,
+      userParams
+    );
+    const filesPreviousWeek = Number(prevWeekRes?.[0]?.count || 0);
+
+    // Delta (absolute difference)
+    const filesDelta = filesThisWeek - filesPreviousWeek;
+
+    // Recent activity today
+    const recentTodayRes = await executeQuery(
+      `SELECT COUNT(*) AS count FROM documents AS doc ${userWhere} AND DATE(doc.created_date) = CURDATE()`,
+      userParams
+    );
+    const recentActivityToday = Number(recentTodayRes?.[0]?.count || 0);
+
+    // Trend: last 7 days bytes per day (use DATE_FORMAT for consistent date string and COALESCE on size)
+    const trendRes = await executeQuery(
+      `SELECT DATE_FORMAT(doc.created_date, '%Y-%m-%d') AS date, COALESCE(SUM(COALESCE(doc.size,0)),0) AS bytes
+       FROM documents AS doc
+       ${userWhere} AND doc.created_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+       GROUP BY date
+       ORDER BY date ASC`,
+      userParams
+    );
+
+    // Normalize trend to ensure 7 days present
+    const trendMap = {};
+    trendRes.forEach((r) => {
+      const dateKey = String(r.date);
+      trendMap[dateKey] = Number(r.bytes || 0);
+    });
+
+    const trendSeries = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split("T")[0];
+      trendSeries.push({ date: key, bytes: trendMap[key] || 0 });
+    }
+
+    // File type distribution (compute file_type per row in a subquery to be compatible with ONLY_FULL_GROUP_BY)
+    const typeDistRes = await executeQuery(
+      `SELECT t.file_type AS file_type, COUNT(*) AS count, COALESCE(SUM(t.bytes), 0) AS bytes
+       FROM (
+         SELECT
+           CASE
+             WHEN LOWER(doc.file_name) LIKE '%.pdf' THEN 'pdf'
+             WHEN LOWER(doc.file_name) LIKE '%.png' THEN 'png'
+             WHEN LOWER(doc.file_name) LIKE '%.jpg' OR LOWER(doc.file_name) LIKE '%.jpeg' THEN 'jpeg'
+             WHEN LOWER(doc.file_name) LIKE '%.gif' THEN 'gif'
+             WHEN LOWER(doc.file_name) LIKE '%.doc' OR LOWER(doc.file_name) LIKE '%.docx' THEN 'docx'
+             WHEN LOWER(doc.file_name) LIKE '%.xls' OR LOWER(doc.file_name) LIKE '%.xlsx' THEN 'excel'
+             WHEN LOWER(doc.file_name) LIKE '%.ppt' OR LOWER(doc.file_name) LIKE '%.pptx' THEN 'ppt'
+             WHEN LOWER(doc.file_name) LIKE '%.txt' THEN 'txt'
+             WHEN LOWER(doc.file_name) LIKE '%.zip' OR LOWER(doc.file_name) LIKE '%.rar' THEN 'archive'
+             ELSE 'other'
+           END AS file_type,
+           doc.size AS bytes
+         FROM documents AS doc
+         ${userWhere}
+       ) AS t
+       GROUP BY t.file_type
+       ORDER BY bytes DESC;`,
+      userParams
+    );
+    const typeDistribution = typeDistRes.map((r) => ({
+      fileType: r.file_type,
+      count: Number(r.count || 0),
+      bytes: Number(r.bytes || 0),
+    }));
+
+    // Recent files (limit 5)
+    const recentFiles = await executeQuery(
+      `SELECT doc.original_file_name, doc.unique_id, doc.file_name, doc.size, doc.file_type, doc.created_date FROM documents AS doc ${userWhere} ORDER BY doc.created_date DESC LIMIT 6`,
+      userParams
+    );
+
+    return {
+      totalFiles,
+      totalSizeBytes,
+      filesThisWeek,
+      filesPreviousWeek,
+      filesDelta,
+      recentActivityToday,
+      trendSeries,
+      typeDistribution,
+      recentFiles,
+    };
+  } catch (error) {
+    console.error("modalGetDashboard error", error);
+    throw new Error("Error while preparing dashboard : " + error);
   }
 };

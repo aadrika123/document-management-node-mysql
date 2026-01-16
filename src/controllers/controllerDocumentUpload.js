@@ -14,6 +14,7 @@ const {
   modalSoftDeleteByUniqueId,
   modalPermanentDeleteByUniqueId,
   modalRecoverByIdentifier,
+  modalGetDashboard,
 } = require("../modal/modalDocumentUpload");
 
 // This is function which take data and add full path of document
@@ -149,14 +150,16 @@ exports.controllerViewAllDocuments = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const page = parseInt(req.query.page) || 1;
     const offset = (page - 1) * limit;
-    const fileType = req.query.fileType || req.query.filetype || null; // accept fileType query param (comma-separated)
+    const fileType = req.query.fileType || req.query.filetype || null;
+    const uniqueId = req.query.uniqueId;
 
     const result = await modalViewAllDocuments(
       userDetails?.type,
       userDetails?.userId,
       limit,
       offset,
-      fileType
+      fileType,
+      uniqueId
     );
 
     if (result?.documents?.length > 0) {
@@ -509,6 +512,67 @@ exports.controllerPermanentDeleteByUniqueId = async (req, res) => {
     res.status(500).json({
       status: false,
       message: "Error while permanently deleting document",
+      error: error.message,
+    });
+  }
+};
+
+// Dashboard controller
+exports.controllerDashboard = async (req, res) => {
+  try {
+    const token = req?.headers?.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(401)
+        .json({ status: false, message: "Please Send token" });
+
+    const userDetails = await decodeJWT(token);
+    if (!userDetails)
+      return res.status(401).json({ status: false, message: "Invalid Token" });
+
+    const result = await modalGetDashboard(
+      userDetails?.type,
+      userDetails?.userId
+    );
+
+    // Add full paths to recent files
+    const recentFilesWithPath = await addFullImagePathInData(
+      result.recentFiles || []
+    );
+
+    const TOTAL_QUOTA_BYTES = process.env.TOTAL_STORAGE_BYTES
+      ? Number(process.env.TOTAL_STORAGE_BYTES)
+      : 100 * 1024 * 1024 * 1024; // default 100GB
+
+    res.status(200).json({
+      status: true,
+      message: "Dashboard Data",
+      data: {
+        totalStorage: {
+          usedBytes: result.totalSizeBytes,
+          usedMB: Number((result.totalSizeBytes / (1024 * 1024)).toFixed(2)),
+          usedGB: Number(
+            (result.totalSizeBytes / (1024 * 1024 * 1024)).toFixed(3)
+          ),
+          quotaBytes: TOTAL_QUOTA_BYTES,
+          quotaGB: Number(
+            (TOTAL_QUOTA_BYTES / (1024 * 1024 * 1024)).toFixed(0)
+          ),
+        },
+        totalFiles: result.totalFiles,
+        filesThisWeek: result.filesThisWeek,
+        filesDelta: result.filesDelta,
+        sharedFiles: 0, // no sharing logic implemented yet
+        recentActivityToday: result.recentActivityToday,
+        storageTrend: result.trendSeries,
+        fileTypeDistribution: result.typeDistribution || [],
+        recentFiles: recentFilesWithPath,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: "Error while fetching dashboard data",
       error: error.message,
     });
   }
