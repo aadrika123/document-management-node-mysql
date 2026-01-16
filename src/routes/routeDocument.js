@@ -13,6 +13,7 @@ const {
   controllerSoftDeleteByUniqueId,
   controllerRecoverDocument,
   controllerPermanentDeleteByUniqueId,
+  controllerDashboard,
 } = require("../controllers/controllerDocumentUpload");
 
 router.route("/upload").post(uploadFileUsingMulter, documentUploadController);
@@ -23,6 +24,7 @@ router.route("/view-removed").post(controllerViewRemovedDocuments);
 router.route("/soft-delete").post(controllerSoftDeleteByUniqueId);
 router.route("/recover").post(controllerRecoverDocument);
 router.route("/permanent-delete").post(controllerPermanentDeleteByUniqueId);
+router.route("/dashboard").get(controllerDashboard);
 
 // router.route('/delete').post(changePermission);
 
